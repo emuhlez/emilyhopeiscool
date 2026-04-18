@@ -757,9 +757,25 @@ function SitePreview({ url }: { url: string }) {
   )
 }
 
+function getYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const u = new URL(url)
+    let videoId: string | null = null
+    if (u.hostname.includes('youtube.com') && u.searchParams.has('v')) {
+      videoId = u.searchParams.get('v')
+    } else if (u.hostname === 'youtu.be') {
+      videoId = u.pathname.slice(1)
+    }
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null
+  } catch {
+    return null
+  }
+}
+
 function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
-  const proxiedUrl = `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
+  const embedUrl = getYouTubeEmbedUrl(url)
+  const proxiedUrl = embedUrl ?? `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
 
   // Reset status when URL changes
   useEffect(() => {
@@ -793,7 +809,8 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
           pointerEvents: dragging ? 'none' : 'auto',
           opacity: status === 'loaded' ? 1 : 0,
         }}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+        allow="autoplay; encrypted-media; picture-in-picture"
         onLoad={() => setStatus('loaded')}
         onError={() => setStatus('error')}
       />
