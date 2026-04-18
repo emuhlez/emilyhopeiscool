@@ -1235,6 +1235,7 @@ export function ArcWindow({
       { type: 'folder', id: -2, label: 'Agentic Studio', expanded: true, children: [
         { type: 'tab', id: 0, url: 'https://www.youtube.com/watch?v=8IcYpOl4Sdk', title: 'Tech Talks EP33 | The Future of Agentic Game Creation' },
         { type: 'tab', id: -3, url: 'https://about.roblox.com/newsroom/2026/04/roblox-studio-going-agentic', title: 'Roblox Studio is Going Agentic' },
+        { type: 'tab', id: -5, url: 'https://devforum.roblox.com/t/announcing-planning-mode-for-roblox-assistant/4580715', title: 'Announcing Planning Mode for Roblox Assistant' },
       ] },
     ] },
     { type: 'folder', id: -4, label: '2025', expanded: false, children: [] },
