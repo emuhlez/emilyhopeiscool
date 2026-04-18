@@ -253,16 +253,6 @@ function findTab(nodes: SidebarNode[], id: number): TabNode | undefined {
   }
 }
 
-function hasChildren(nodes: SidebarNode[], folderId: number): boolean {
-  for (const n of nodes) {
-    if (n.type === 'folder' && n.id === folderId) return n.children.length > 0
-    if (n.type === 'folder') {
-      const found = hasChildren(n.children, folderId)
-      if (found) return true
-    }
-  }
-  return false
-}
 
 /* ─── sidebar sub-components ─── */
 

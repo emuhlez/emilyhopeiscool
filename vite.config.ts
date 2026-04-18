@@ -32,6 +32,7 @@ export default defineConfig(async () => {
             ],
             build: {
               lib: {
+                entry: 'electron/main.ts',
                 formats: ['cjs'],
                 fileName: () => 'main.cjs',
               },
