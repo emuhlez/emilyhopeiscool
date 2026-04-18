@@ -752,21 +752,49 @@ function getYouTubeEmbedUrl(url: string): string | null {
 
 function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const embedUrl = getYouTubeEmbedUrl(url)
-  const proxiedUrl = embedUrl ?? `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
 
-  // Reset status when URL changes
+  // For non-YouTube URLs, fetch via POST to avoid URI length limits
   useEffect(() => {
+    if (embedUrl) {
+      setBlobUrl(null)
+      setStatus('loading')
+      return
+    }
+
     setStatus('loading')
-  }, [url])
+    let revoke: string | null = null
+
+    fetch(`/api/iframe-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, mode: 'proxy' }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Proxy failed')
+        return r.blob()
+      })
+      .then(blob => {
+        const objectUrl = URL.createObjectURL(blob)
+        revoke = objectUrl
+        setBlobUrl(objectUrl)
+        setStatus('loaded')
+      })
+      .catch(() => setStatus('error'))
+
+    return () => { if (revoke) URL.revokeObjectURL(revoke) }
+  }, [url, embedUrl])
 
   if (status === 'error') {
     return <SitePreview url={url} />
   }
 
+  const iframeSrc = embedUrl ?? blobUrl
+
   return (
     <>
-      {status === 'loading' && (
+      {(status === 'loading' || status === 'checking' as string) && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
           <div className="flex flex-col items-center gap-3">
             <div
@@ -776,22 +804,23 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
           </div>
         </div>
       )}
-      <iframe
-        src={proxiedUrl}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          border: 'none',
-          pointerEvents: dragging ? 'none' : 'auto',
-          opacity: status === 'loaded' ? 1 : 0,
-        }}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        onLoad={() => setStatus('loaded')}
-        onError={() => setStatus('error')}
-      />
+      {iframeSrc && (
+        <iframe
+          src={iframeSrc}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            pointerEvents: dragging ? 'none' : 'auto',
+          }}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          onLoad={() => setStatus('loaded')}
+          onError={() => setStatus('error')}
+        />
+      )}
     </>
   )
 }

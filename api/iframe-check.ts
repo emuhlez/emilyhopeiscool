@@ -120,10 +120,19 @@ const NAV_INTERCEPT_SCRIPT = `<script>
 /* ── handler ── */
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { url, mode = 'proxy' } = req.query as { url?: string; mode?: string }
+  let url: string | undefined
+  let mode = 'proxy'
+
+  if (req.method === 'POST') {
+    url = req.body?.url
+    mode = req.body?.mode ?? 'proxy'
+  } else {
+    url = req.query.url as string | undefined
+    mode = (req.query.mode as string) ?? 'proxy'
+  }
 
   if (!url) {
-    return res.status(400).json({ error: 'Missing ?url= parameter' })
+    return res.status(400).json({ error: 'Missing url parameter' })
   }
 
   let target: URL
