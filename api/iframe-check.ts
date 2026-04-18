@@ -85,6 +85,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let html = await upstream.text()
 
+    // Strip all script tags to prevent proxied JS from crashing the host app
+    html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    html = html.replace(/<script\b[^>]*\/>/gi, '')
+
     // Inject <base> tag so relative URLs resolve against the original site
     const baseTag = `<base href="${target.origin}/">`
     if (/<head[^>]*>/i.test(html)) {
@@ -92,15 +96,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       html = baseTag + html
     }
-
-    // Inject frame-bust guard: prevent the page from breaking out of our iframe
-    const frameBustGuard = `<script>
-      // Override common frame-busting techniques
-      if (window.top !== window.self) {
-        Object.defineProperty(window, 'top', { get: function() { return window.self; } });
-      }
-    </script>`
-    html = html.replace(/<head([^>]*)>/i, `<head$1>${frameBustGuard}`)
 
     // Set response headers — strip frame-blocking headers
     res.setHeader('Content-Type', contentType)

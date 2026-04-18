@@ -712,7 +712,6 @@ const SAVED_LINKS = [
 function SitePreview({ url }: { url: string }) {
   const link = SAVED_LINKS.find(l => url.includes(new URL(l.url).hostname))
   const hostname = (() => { try { return new URL(url).hostname } catch { return url } })()
-  const [hovered, setHovered] = useState(false)
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={{ background: '#1a1a2e' }}>
@@ -732,27 +731,6 @@ function SitePreview({ url }: { url: string }) {
           {hostname}
         </span>
       </div>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-2 rounded-full px-6 text-[13px] font-medium text-white no-underline transition-transform active:scale-95"
-        style={{
-          height: 36,
-          background: link?.color ?? 'rgba(255,255,255,0.15)',
-          boxShadow: hovered
-            ? `0 4px 20px ${(link?.color ?? '#fff') + '44'}`
-            : '0 2px 8px rgba(0,0,0,0.2)',
-          transition: 'box-shadow 0.2s, transform 0.1s',
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        Open in New Tab
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M4.5 2H2.5C1.95 2 1.5 2.45 1.5 3V9.5C1.5 10.05 1.95 10.5 2.5 10.5H9C9.55 10.5 10 10.05 10 9.5V7.5M7 2H10M10 2V5M10 2L4.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </a>
     </div>
   )
 }
@@ -773,43 +751,17 @@ function getYouTubeEmbedUrl(url: string): string | null {
 }
 
 function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'error' | 'checking'>('checking')
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
   const embedUrl = getYouTubeEmbedUrl(url)
-
-  // Check if the site can be embedded before trying to proxy
-  useEffect(() => {
-    if (embedUrl) {
-      setStatus('loading')
-      return
-    }
-    setStatus('checking')
-    fetch(`/api/iframe-check?mode=check&url=${encodeURIComponent(url)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.embeddable) {
-          setStatus('loading')
-        } else {
-          setStatus('error')
-        }
-      })
-      .catch(() => setStatus('error'))
-  }, [url, embedUrl])
-
   const proxiedUrl = embedUrl ?? `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
+
+  // Reset status when URL changes
+  useEffect(() => {
+    setStatus('loading')
+  }, [url])
 
   if (status === 'error') {
     return <SitePreview url={url} />
-  }
-
-  if (status === 'checking') {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
-          <span className="text-[12px] text-white/30">Loading...</span>
-        </div>
-      </div>
-    )
   }
 
   return (
