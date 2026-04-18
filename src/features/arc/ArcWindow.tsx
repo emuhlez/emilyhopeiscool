@@ -773,17 +773,43 @@ function getYouTubeEmbedUrl(url: string): string | null {
 }
 
 function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
-  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error' | 'checking'>('checking')
   const embedUrl = getYouTubeEmbedUrl(url)
-  const proxiedUrl = embedUrl ?? `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
 
-  // Reset status when URL changes
+  // Check if the site can be embedded before trying to proxy
   useEffect(() => {
-    setStatus('loading')
-  }, [url])
+    if (embedUrl) {
+      setStatus('loading')
+      return
+    }
+    setStatus('checking')
+    fetch(`/api/iframe-check?mode=check&url=${encodeURIComponent(url)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.embeddable) {
+          setStatus('loading')
+        } else {
+          setStatus('error')
+        }
+      })
+      .catch(() => setStatus('error'))
+  }, [url, embedUrl])
+
+  const proxiedUrl = embedUrl ?? `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
 
   if (status === 'error') {
     return <SitePreview url={url} />
+  }
+
+  if (status === 'checking') {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+          <span className="text-[12px] text-white/30">Loading...</span>
+        </div>
+      </div>
+    )
   }
 
   return (
