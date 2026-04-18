@@ -1138,6 +1138,21 @@ export function ArcWindow({
     if (idx < historyRef.current.length - 1) setHistoryIndex(idx + 1)
   }, [])
 
+  // Listen for navigation events from proxied iframes
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.type === 'iframeNavigation' && e.data.url) {
+        navigateRef.current(e.data.url)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
   // Attach webview event listeners (Electron only)
   useEffect(() => {
     if (!isElectron) return
