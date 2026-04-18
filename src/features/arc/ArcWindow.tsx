@@ -1,0 +1,1510 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { TrafficLights } from '../../components/TrafficLights'
+import { useAppStore } from '../../stores/app-store'
+import { useMinimizeAnimation } from '../../hooks/useMinimizeAnimation'
+
+/* ─── helpers ─── */
+
+function useFaviconColor(url: string, fallback = '#1f1f1f'): string {
+  const [color, setColor] = useState(fallback)
+
+  useEffect(() => {
+    if (!url) {
+      setColor(fallback)
+      return
+    }
+
+    let hostname: string
+    try {
+      hostname = new URL(url).hostname
+    } catch {
+      setColor(fallback)
+      return
+    }
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, w, h).data
+
+      // Find the most "colorful" dominant color by ignoring near-white/near-black pixels
+      let rSum = 0, gSum = 0, bSum = 0, count = 0
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3]
+        if (a < 128) continue // skip transparent
+        const brightness = (r + g + b) / 3
+        if (brightness > 240 || brightness < 15) continue // skip near-white/black
+        rSum += r
+        gSum += g
+        bSum += b
+        count++
+      }
+
+      if (count === 0) {
+        setColor(fallback)
+        return
+      }
+
+      const rAvg = Math.round(rSum / count)
+      const gAvg = Math.round(gSum / count)
+      const bAvg = Math.round(bSum / count)
+
+      // Darken the color so text stays readable (mix with dark)
+      const mix = 0.35
+      const rDark = Math.round(rAvg * mix)
+      const gDark = Math.round(gAvg * mix)
+      const bDark = Math.round(bAvg * mix)
+
+      setColor(`rgb(${rDark}, ${gDark}, ${bDark})`)
+    }
+  }, [url, fallback])
+
+  return color
+}
+
+/* ─── resize types ─── */
+
+type Dir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+
+interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+const MENU_BAR_H = 28
+const DOCK_H = 70
+const MIN_W = 400
+const MIN_H = 300
+const HANDLE = 6
+const SIDEBAR_DEFAULT = 232
+const SIDEBAR_MIN = 160
+const SIDEBAR_MAX = 400
+
+const CURSORS: Record<Dir, string> = {
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  ne: 'nesw-resize',
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  sw: 'nesw-resize',
+}
+
+function handleStyle(dir: Dir): React.CSSProperties {
+  const h = HANDLE
+  const base: React.CSSProperties = { position: 'absolute', cursor: CURSORS[dir] }
+
+  switch (dir) {
+    case 'n':
+      return { ...base, top: -h / 2, left: h, right: h, height: h }
+    case 's':
+      return { ...base, bottom: -h / 2, left: h, right: h, height: h }
+    case 'e':
+      return { ...base, right: -h / 2, top: h, bottom: h, width: h }
+    case 'w':
+      return { ...base, left: -h / 2, top: h, bottom: h, width: h }
+    case 'nw':
+      return { ...base, top: -h / 2, left: -h / 2, width: h * 2, height: h * 2 }
+    case 'ne':
+      return { ...base, top: -h / 2, right: -h / 2, width: h * 2, height: h * 2 }
+    case 'sw':
+      return { ...base, bottom: -h / 2, left: -h / 2, width: h * 2, height: h * 2 }
+    case 'se':
+      return { ...base, bottom: -h / 2, right: -h / 2, width: h * 2, height: h * 2 }
+  }
+}
+
+function clampMove(r: Rect): Rect {
+  const vw = window.innerWidth
+
+  let { x, y } = r
+  const { w, h } = r
+
+  if (y < MENU_BAR_H) y = MENU_BAR_H
+  if (x < 0) x = 0
+  if (x + w > vw) x = vw - w
+
+  return { x, y, w, h }
+}
+
+function clampResize(r: Rect): Rect {
+  const vw = window.innerWidth
+
+  let { x, y, w, h } = r
+
+  if (y < MENU_BAR_H) {
+    const overflow = MENU_BAR_H - y
+    y = MENU_BAR_H
+    h = Math.max(MIN_H, h - overflow)
+  }
+
+  if (x < 0) x = 0
+
+  if (x + w > vw) {
+    w = Math.max(MIN_W, vw - x)
+  }
+
+  return { x, y, w, h }
+}
+
+function applyResize(start: Rect, dir: Dir, dx: number, dy: number): Rect {
+  const next = { ...start }
+
+  if (dir.includes('e')) {
+    next.w = Math.max(MIN_W, start.w + dx)
+  }
+  if (dir.includes('w')) {
+    const newW = Math.max(MIN_W, start.w - dx)
+    next.x = start.x + (start.w - newW)
+    next.w = newW
+  }
+  if (dir.includes('s')) {
+    next.h = Math.max(MIN_H, start.h + dy)
+  }
+  if (dir === 'n' || dir === 'ne' || dir === 'nw') {
+    const newH = Math.max(MIN_H, start.h - dy)
+    next.y = start.y + (start.h - newH)
+    next.h = newH
+  }
+
+  return clampResize(next)
+}
+
+const ALL_DIRS: Dir[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
+
+/* ─── sidebar tree types ─── */
+
+interface TabNode {
+  type: 'tab'
+  id: number
+  url: string
+  title?: string
+}
+
+interface FolderNode {
+  type: 'folder'
+  id: number
+  label: string
+  expanded: boolean
+  children: SidebarNode[]
+}
+
+type SidebarNode = TabNode | FolderNode
+
+function findAllTabs(nodes: SidebarNode[]): TabNode[] {
+  const result: TabNode[] = []
+  for (const node of nodes) {
+    if (node.type === 'tab') result.push(node)
+    else result.push(...findAllTabs(node.children))
+  }
+  return result
+}
+
+function removeNode(nodes: SidebarNode[], id: number): SidebarNode[] {
+  return nodes
+    .filter(n => n.id !== id)
+    .map(n => n.type === 'folder' ? { ...n, children: removeNode(n.children, id) } : n)
+}
+
+function toggleFolder(nodes: SidebarNode[], id: number): SidebarNode[] {
+  return nodes.map(n => {
+    if (n.type === 'folder' && n.id === id) return { ...n, expanded: !n.expanded }
+    if (n.type === 'folder') return { ...n, children: toggleFolder(n.children, id) }
+    return n
+  })
+}
+
+function addTabToFolder(nodes: SidebarNode[], folderId: number, tab: TabNode): SidebarNode[] {
+  return nodes.map(n => {
+    if (n.type === 'folder' && n.id === folderId) return { ...n, children: [...n.children, tab], expanded: true }
+    if (n.type === 'folder') return { ...n, children: addTabToFolder(n.children, folderId, tab) }
+    return n
+  })
+}
+
+function updateTabUrl(nodes: SidebarNode[], tabId: number, url: string): SidebarNode[] {
+  return nodes.map(n => {
+    if (n.type === 'tab' && n.id === tabId) return { ...n, url }
+    if (n.type === 'folder') return { ...n, children: updateTabUrl(n.children, tabId, url) }
+    return n
+  })
+}
+
+function findTab(nodes: SidebarNode[], id: number): TabNode | undefined {
+  for (const n of nodes) {
+    if (n.type === 'tab' && n.id === id) return n
+    if (n.type === 'folder') {
+      const found = findTab(n.children, id)
+      if (found) return found
+    }
+  }
+}
+
+function hasChildren(nodes: SidebarNode[], folderId: number): boolean {
+  for (const n of nodes) {
+    if (n.type === 'folder' && n.id === folderId) return n.children.length > 0
+    if (n.type === 'folder') {
+      const found = hasChildren(n.children, folderId)
+      if (found) return true
+    }
+  }
+  return false
+}
+
+/* ─── sidebar sub-components ─── */
+
+
+function SidebarIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex size-6 items-center justify-center rounded text-white/40">
+      {children}
+    </div>
+  )
+}
+
+function SidebarToggle({ onClick }: { onClick?: () => void }) {
+  return (
+    <div onClick={onClick} style={{ cursor: 'default' }}>
+      <SidebarIcon>
+        <svg width="14" height="14" viewBox="0 0 18 14" fill="none">
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M2 0C0.895 0 0 0.895 0 2V12C0 13.105 0.895 14 2 14H16C17.105 14 18 13.105 18 12V2C18 0.895 17.105 0 16 0H2ZM16 1.5H7.75V12.5H16C16.276 12.5 16.5 12.276 16.5 12V2C16.5 1.724 16.276 1.5 16 1.5ZM2 1.5H6.25V12.5H2C1.724 12.5 1.5 12.276 1.5 12V2C1.5 1.724 1.724 1.5 2 1.5Z"
+            fill="currentColor"
+          />
+          <line x1="3" y1="3.5" x2="5" y2="3.5" stroke="currentColor" strokeWidth="1" />
+          <line x1="3" y1="5.5" x2="5" y2="5.5" stroke="currentColor" strokeWidth="1" />
+          <line x1="3" y1="7.5" x2="5" y2="7.5" stroke="currentColor" strokeWidth="1" />
+        </svg>
+      </SidebarIcon>
+    </div>
+  )
+}
+
+function NavControls({
+  loading,
+  canGoBack,
+  canGoForward,
+  onBack,
+  onForward,
+  onRefresh,
+  onStop,
+}: {
+  loading?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  onBack?: () => void
+  onForward?: () => void
+  onRefresh?: () => void
+  onStop?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div onClick={canGoBack ? onBack : undefined} style={{ cursor: canGoBack ? 'default' : undefined }}>
+        <SidebarIcon>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+            <path
+              d="M6.5 1.5L1.5 6M1.5 6L6.5 10.5M1.5 6H15"
+              stroke="white"
+              strokeOpacity={canGoBack ? 0.4 : 0.2}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </SidebarIcon>
+      </div>
+      <div onClick={canGoForward ? onForward : undefined} style={{ cursor: canGoForward ? 'default' : undefined }}>
+        <SidebarIcon>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+            <path
+              d="M9.5 1L14.5 5.5M14.5 5.5L9.5 10M14.5 5.5H1"
+              stroke="white"
+              strokeOpacity={canGoForward ? 0.4 : 0.2}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </SidebarIcon>
+      </div>
+      <div
+        onClick={loading ? onStop : onRefresh}
+        style={{ cursor: 'default' }}
+      >
+        <SidebarIcon>
+          {loading ? (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path
+                d="M1 1L11 11M11 1L1 11"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <svg width="16" height="12" viewBox="0 0 16 14" fill="none">
+              <path
+                d="M13.5 3L11 0.5M13.5 3L11 5.5M13.5 3H9C5.69 3 3 5.69 3 9C3 12.31 5.69 15 9 15C12.31 15 15 12.31 15 9"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                transform="translate(0, -1)"
+              />
+            </svg>
+          )}
+        </SidebarIcon>
+      </div>
+    </div>
+  )
+}
+
+
+function PinnedTab({ children, label, active, gradient, onClick }: { children: React.ReactNode; label: string; active?: boolean; gradient?: string; onClick?: () => void }) {
+  const [hovered, setHovered] = useState(false)
+
+  const colors = gradient?.split(',').map(c => c.trim()) ?? []
+  const activeBg = colors.length
+    ? `linear-gradient(135deg, ${colors.map(c => c + '30').join(', ')}), linear-gradient(rgba(255,255,255,0.22), rgba(255,255,255,0.22))`
+    : 'rgba(255, 255, 255, 0.22)'
+  const activeShadow = colors.length
+    ? `inset 0 0 0 1.5px ${colors[0]}88`
+    : 'inset 0 0 0 1.5px rgba(255, 255, 255, 0.2)'
+
+  let bg = 'rgba(255, 255, 255, 0.08)'
+  if (active) bg = activeBg
+  else if (hovered) bg = 'rgba(255, 255, 255, 0.14)'
+
+  return (
+    <div
+      className="flex min-w-0 flex-1 items-center justify-center rounded-xl"
+      style={{
+        minWidth: 50,
+        height: 46,
+        background: bg,
+        boxShadow: active ? activeShadow : undefined,
+        cursor: onClick ? 'pointer' : undefined,
+        transition: 'background 0.2s, box-shadow 0.2s',
+      }}
+      title={label}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {children}
+    </div>
+  )
+}
+
+function PinnedTabs({ activeUrl, onNavigate }: { activeUrl?: string; onNavigate?: (url: string) => void }) {
+  const isActive = (tabUrl: string) => !!activeUrl && activeUrl.includes(new URL(tabUrl).hostname)
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <PinnedTab label="LinkedIn" gradient="#0A66C2, #0077B5" active={isActive('https://www.linkedin.com/in/emilyhlouie/')} onClick={() => !isActive('https://www.linkedin.com/in/emilyhlouie/') && onNavigate?.('https://www.linkedin.com/in/emilyhlouie/')}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M13.633 13.635h-2.37V9.922c0-.886-.016-2.025-1.234-2.025-1.235 0-1.424.964-1.424 1.96v3.778H6.234V5.998h2.275v1.044h.032c.317-.6 1.09-1.233 2.246-1.233 2.401 0 2.845 1.58 2.845 3.637v4.189zM3.558 4.955a1.376 1.376 0 1 1 0-2.752 1.376 1.376 0 0 1 0 2.752zm1.187 8.68H2.37V5.998h2.376v7.637z" fill="white" />
+        </svg>
+      </PinnedTab>
+      <PinnedTab label="Letterboxd" gradient="#FF8000, #00E054, #40BCF4" active={isActive('https://letterboxd.com/emuhlez/')} onClick={() => !isActive('https://letterboxd.com/emuhlez/') && onNavigate?.('https://letterboxd.com/emuhlez/')}>
+        <svg width="16" height="16" viewBox="0 0 262 97" fill="none">
+          <ellipse fill="#FF8000" cx="48.573" cy="48.5" rx="48.573" ry="48.5" />
+          <ellipse fill="#00E054" cx="131" cy="48.5" rx="48.573" ry="48.5" />
+          <ellipse fill="#40BCF4" cx="213.427" cy="48.5" rx="48.573" ry="48.5" />
+          <path fill="#556677" d="M89.787,74.179 C85.123,66.732 82.427,57.93 82.427,48.499 C82.427,39.069 85.123,30.267 89.787,22.82 C94.45,30.267 97.146,39.069 97.146,48.499 C97.146,57.93 94.45,66.732 89.787,74.179Z" />
+          <path fill="#556677" d="M172.213,22.82 C176.877,30.267 179.573,39.069 179.573,48.499 C179.573,57.93 176.877,66.732 172.213,74.179 C167.55,66.732 164.854,57.93 164.854,48.499 C164.854,39.069 167.55,30.267 172.213,22.82Z" />
+        </svg>
+      </PinnedTab>
+      <PinnedTab label="Strava" gradient="#FC4C02, #F9B797" active={isActive('https://www.strava.com/athletes/63689786')} onClick={() => !isActive('https://www.strava.com/athletes/63689786') && onNavigate?.('https://www.strava.com/athletes/63689786')}>
+        <svg width="16" height="16" viewBox="0 0 64 64" fill="none">
+          <path d="M41.03 47.852l-5.572-10.976h-8.172L41.03 64l13.736-27.124h-8.18" fill="#F9B797" />
+          <path d="M27.898 21.944l7.564 14.928h11.124L27.898 0 9.234 36.876H20.35" fill="#F05222" />
+        </svg>
+      </PinnedTab>
+    </div>
+  )
+}
+
+function TabItem({ icon, label, active = false, bold = false, onClick, onClose }: { icon: React.ReactNode; label: string; active?: boolean; bold?: boolean; onClick?: () => void; onClose?: () => void }) {
+  const [hovered, setHovered] = useState(false)
+
+  let bg: string | undefined
+  if (active) bg = 'rgba(255, 255, 255, 0.28)'
+  else if (hovered) bg = 'rgba(255, 255, 255, 0.1)'
+
+  return (
+    <div
+      className="group/tab flex items-center gap-2 rounded-xl px-4"
+      style={{ height: 40, background: bg, transition: 'background 0.15s', cursor: 'default' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span
+        className={`truncate text-[12px] font-['SF_Pro',-apple-system,BlinkMacSystemFont,sans-serif] ${bold ? 'font-semibold' : ''}`}
+        style={{ color: active || hovered ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.4)' }}
+      >
+        {label}
+      </span>
+      {onClose && (
+        <TabCloseButton onClick={(e) => { e.stopPropagation(); onClose() }} />
+      )}
+    </div>
+  )
+}
+
+function SidebarNodeItem({
+  node,
+  depth,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onToggleFolder,
+}: {
+  node: SidebarNode
+  depth: number
+  activeTabId: number | null
+  onSelectTab: (id: number) => void
+  onCloseTab: (id: number) => void
+  onToggleFolder: (id: number) => void
+}) {
+  if (node.type === 'tab') {
+    let hostname: string
+    try { hostname = new URL(node.url).hostname.replace(/^www\./, '') } catch { hostname = node.url }
+    const label = node.title || hostname
+    return (
+      <div style={{ paddingLeft: depth * 16 }}>
+        <TabItem
+          icon={
+            <img
+              src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+              width={16}
+              height={16}
+              alt=""
+              className="shrink-0 rounded-sm"
+            />
+          }
+          label={label}
+          active={node.id === activeTabId}
+          onClick={() => onSelectTab(node.id)}
+          onClose={() => onCloseTab(node.id)}
+        />
+      </div>
+    )
+  }
+
+  const hasKids = node.children.length > 0
+
+  return (
+    <div>
+      <div style={{ paddingLeft: depth * 16 }}>
+        <TabItem
+          icon={
+            <div className="relative" style={{ width: 18, height: 18 }}>
+              <AnimatePresence initial={false}>
+                {hasKids && node.expanded ? (
+                  <motion.div
+                    key="open"
+                    className="absolute inset-0"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <FolderOpenIcon />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="closed"
+                    className="absolute inset-0"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <FolderIcon />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          }
+          label={node.label}
+          bold
+          onClick={() => onToggleFolder(node.id)}
+        />
+      </div>
+      <AnimatePresence initial={false}>
+        {node.expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            {node.children.map(child => (
+              <SidebarNodeItem
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                activeTabId={activeTabId}
+                onSelectTab={onSelectTab}
+                onCloseTab={onCloseTab}
+                onToggleFolder={onToggleFolder}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function FolderIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      {/* Back panel */}
+      <path d="M0 3C0 1.343 1.343 0 3 0H6.948C7.629 0 8.29 0.232 8.822 0.657L9.678 1.343C10.21 1.768 10.871 2 11.552 2H15C16.657 2 18 3.343 18 5V13C18 14.657 16.657 16 15 16H3C1.343 16 0 14.657 0 13V3Z" fill="white" fillOpacity="0.15" />
+      <path d="M3 0.75H6.947C7.458 0.75 7.955 0.924 8.354 1.243L9.21 1.929C9.875 2.46 10.701 2.75 11.553 2.75H15C16.243 2.75 17.25 3.757 17.25 5V13C17.25 14.243 16.243 15.25 15 15.25H3C1.757 15.25 0.75 14.243 0.75 13V3C0.75 1.757 1.757 0.75 3 0.75Z" stroke="white" strokeOpacity="0.7" strokeWidth="1.5" />
+      {/* Front panel */}
+      <rect x="0" y="5" width="18" height="11" rx="3" fill="black" />
+      <rect x="0.75" y="5.75" width="16.5" height="9.5" rx="2.25" stroke="white" strokeOpacity="0.7" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function FolderOpenIcon() {
+  return (
+    <svg width="18" height="16" viewBox="0 0 18 16" fill="none">
+      {/* Back panel with tab */}
+      <path d="M0 3C0 1.343 1.343 0 3 0H6.948C7.629 0 8.29 0.232 8.822 0.657L9.678 1.343C10.21 1.768 10.871 2 11.552 2H15C16.657 2 18 3.343 18 5V5H0V3Z" fill="white" fillOpacity="0.15" />
+      <path d="M3 0.75H6.947C7.458 0.75 7.955 0.924 8.354 1.243L9.21 1.929C9.875 2.46 10.701 2.75 11.553 2.75H15C16.243 2.75 17.25 3.757 17.25 5V5H0.75V3C0.75 1.757 1.757 0.75 3 0.75Z" stroke="white" strokeOpacity="0.7" strokeWidth="1.5" />
+      {/* Open front flap */}
+      <path d="M0 7C0 5.895 0.895 5 2 5H16C17.105 5 18 5.895 18 7L16.5 13C16.5 14.105 15.605 15 14.5 15H3.5C2.395 15 1.5 14.105 1.5 13L0 7Z" fill="black" />
+      <path d="M0.75 7C0.75 6.31 1.31 5.75 2 5.75H16C16.69 5.75 17.25 6.31 17.25 7L15.82 12.87C15.72 13.56 15.16 14.25 14.5 14.25H3.5C2.84 14.25 2.28 13.56 2.18 12.87L0.75 7Z" stroke="white" strokeOpacity="0.7" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0" style={{ minWidth: 16, minHeight: 16 }}>
+      <circle cx="8" cy="8" r="6" stroke="white" strokeOpacity="0.4" strokeWidth="1.2" />
+      <ellipse cx="8" cy="8" rx="3" ry="6" stroke="white" strokeOpacity="0.4" strokeWidth="1.2" />
+      <line x1="2" y1="8" x2="14" y2="8" stroke="white" strokeOpacity="0.4" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 0.5V13.5M0.5 7H13.5" stroke="white" strokeOpacity="0.4" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function BinWithStarsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="67 1042 15 18" fill="none">
+      {/* Bin body */}
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M70 1050C69.4477 1050 69 1050.45 69 1051V1057C69 1058.1 69.8954 1059 71 1059H79C80.1046 1059 81 1058.1 81 1057V1051C81 1050.45 80.5523 1050 80 1050H70ZM73.5 1051C73.2239 1051 73 1051.22 73 1051.5V1052.5C73 1052.78 73.2239 1053 73.5 1053H76.5C76.7761 1053 77 1052.78 77 1052.5V1051.5C77 1051.22 76.7761 1051 76.5 1051H73.5Z"
+        fill="white"
+        fillOpacity="0.4"
+      />
+      {/* Bin lid */}
+      <path
+        d="M80.2562 1046.01L80.9573 1047.41C81.2066 1047.91 80.844 1048.5 80.2865 1048.5H78.5H75H68.5C68.2239 1048.5 68 1048.28 68 1048V1047.62C68 1047.24 68.214 1046.89 68.5528 1046.72L70.6365 1045.68C70.8681 1045.57 71.0405 1045.36 71.1117 1045.11L71.1773 1044.88C71.4137 1044.05 72.5863 1044.05 72.8227 1044.88C72.9276 1045.25 73.2634 1045.5 73.6454 1045.5H75.6529C76.1417 1045.5 76.5744 1045.85 76.578 1046.34C76.5905 1048.05 75.5805 1048.5 75 1048.5H78.5V1046.43C78.5 1045.92 78.9151 1045.5 79.4271 1045.5C79.7782 1045.5 80.0992 1045.7 80.2562 1046.01Z"
+        fill="white"
+        fillOpacity="0.4"
+      />
+      {/* Lid dot */}
+      <path
+        d="M78 1044C78 1044.55 77.5523 1045 77 1045C76.4477 1045 76 1044.55 76 1044C76 1043.45 76.4477 1043 77 1043C77.5523 1043 78 1043.45 78 1044Z"
+        fill="white"
+        fillOpacity="0.4"
+      />
+    </svg>
+  )
+}
+
+function ArcTopbar({
+  color,
+  url,
+  sidebarCollapsed,
+  canGoBack,
+  canGoForward,
+  onToggleSidebar,
+  onBack,
+  onForward,
+  onRefresh,
+  onStop,
+  onOpenSearch,
+  loading,
+}: {
+  color: string
+  url: string
+  sidebarCollapsed?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  onToggleSidebar?: () => void
+  onBack?: () => void
+  onForward?: () => void
+  onRefresh?: () => void
+  onStop?: () => void
+  onOpenSearch?: () => void
+  loading?: boolean
+}) {
+  const displayUrl = url ? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''
+
+  return (
+    <div className="sticky top-0 z-10" style={{ background: color, transition: 'background 0.4s ease' }}>
+      <div className="relative flex items-center px-3" style={{ height: 36 }}>
+        {/* Left controls */}
+        <div className="relative z-10 flex items-center gap-2">
+          {sidebarCollapsed && <SidebarToggle onClick={onToggleSidebar} />}
+          <NavControls
+            loading={loading}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            onBack={onBack}
+            onForward={onForward}
+            onRefresh={onRefresh}
+            onStop={onStop}
+          />
+        </div>
+
+        {/* URL display – click to open search dialog */}
+        <div className="absolute inset-0 flex items-center justify-center px-28">
+          <div
+            className="flex min-w-0 max-w-full cursor-text items-center gap-1.5 truncate rounded-md px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-white/[0.08]"
+            onClick={onOpenSearch}
+          >
+            <GlobeIcon />
+            <span className="truncate">{displayUrl}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 0.5, background: 'rgba(0, 0, 0, 0.08)' }} />
+    </div>
+  )
+}
+
+const SAVED_LINKS = [
+  { label: 'LinkedIn – Emily Louie', url: 'https://www.linkedin.com/in/emilyhlouie/', icon: 'linkedin', color: '#0A66C2' },
+  { label: 'Letterboxd – emuhlez', url: 'https://letterboxd.com/emuhlez/', icon: 'letterboxd', color: '#00E054' },
+  { label: 'Strava – Emily Louie', url: 'https://www.strava.com/athletes/63689786', icon: 'strava', color: '#FC4C02' },
+  { label: 'GitHub – emilyhlouie', url: 'https://github.com/emilyhlouie', icon: 'github', color: '#8B5CF6' },
+  { label: 'Spotify – Emily', url: 'https://open.spotify.com/', icon: 'spotify', color: '#1DB954' },
+] as const
+
+function SitePreview({ url }: { url: string }) {
+  const link = SAVED_LINKS.find(l => url.includes(new URL(l.url).hostname))
+  const hostname = (() => { try { return new URL(url).hostname } catch { return url } })()
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={{ background: '#1a1a2e' }}>
+      <img
+        src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=128`}
+        width={64}
+        height={64}
+        alt=""
+        className="rounded-2xl"
+        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
+      />
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="text-[15px] font-medium text-white/90">
+          {link?.label ?? hostname}
+        </span>
+        <span className="text-[12px] text-white/30">
+          {hostname}
+        </span>
+      </div>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 rounded-full px-6 text-[13px] font-medium text-white no-underline transition-transform active:scale-95"
+        style={{
+          height: 36,
+          background: link?.color ?? 'rgba(255,255,255,0.15)',
+          boxShadow: hovered
+            ? `0 4px 20px ${(link?.color ?? '#fff') + '44'}`
+            : '0 2px 8px rgba(0,0,0,0.2)',
+          transition: 'box-shadow 0.2s, transform 0.1s',
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        Open in New Tab
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M4.5 2H2.5C1.95 2 1.5 2.45 1.5 3V9.5C1.5 10.05 1.95 10.5 2.5 10.5H9C9.55 10.5 10 10.05 10 9.5V7.5M7 2H10M10 2V5M10 2L4.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </a>
+    </div>
+  )
+}
+
+function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const proxiedUrl = `/api/iframe-check?mode=proxy&url=${encodeURIComponent(url)}`
+
+  // Reset status when URL changes
+  useEffect(() => {
+    setStatus('loading')
+  }, [url])
+
+  if (status === 'error') {
+    return <SitePreview url={url} />
+  }
+
+  return (
+    <>
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
+            />
+            <span className="text-[12px] text-white/30">Loading...</span>
+          </div>
+        </div>
+      )}
+      <iframe
+        src={proxiedUrl}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          pointerEvents: dragging ? 'none' : 'auto',
+          opacity: status === 'loaded' ? 1 : 0,
+        }}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+      />
+    </>
+  )
+}
+
+function SearchDialog({ url, onNavigate, onClose }: { url: string; onNavigate: (url: string) => void; onClose: () => void }) {
+  const [query, setQuery] = useState(url)
+  const [selectedIdx, setSelectedIdx] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.select(), 0)
+  }, [])
+
+  const q = query.toLowerCase()
+  const filtered = q
+    ? SAVED_LINKS.filter(l => l.label.toLowerCase().includes(q) || l.url.toLowerCase().includes(q))
+    : SAVED_LINKS
+
+  const showGoogleOption = q.length > 0
+
+  const totalItems = filtered.length + (showGoogleOption ? 1 : 0)
+
+  const commit = useCallback((targetUrl?: string) => {
+    const finalTarget = targetUrl || query.trim()
+    if (!finalTarget) { onClose(); return }
+    let u = finalTarget
+    if (/^https?:\/\//i.test(u)) {
+      // Already a full URL
+      onNavigate(u)
+    } else if (/^[^\s]+\.[^\s]+$/.test(u)) {
+      // Looks like a domain (e.g. "google.com", "foo.bar/path")
+      onNavigate('https://' + u)
+    } else {
+      // Treat as a search query
+      onNavigate(`https://www.google.com/search?q=${encodeURIComponent(u)}`)
+    }
+  }, [query, onNavigate, onClose])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIdx(i => Math.min(i + 1, totalItems - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIdx(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      if (selectedIdx < filtered.length) {
+        commit(filtered[selectedIdx].url)
+      } else if (showGoogleOption) {
+        commit(`https://www.google.com/search?q=${encodeURIComponent(query)}`)
+      } else {
+        commit()
+      }
+    } else if (e.key === 'Escape') {
+      onClose()
+    }
+  }, [selectedIdx, filtered, showGoogleOption, query, commit, onClose, totalItems])
+
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center"
+      style={{ borderRadius: 18 }}
+      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="flex w-[min(500px,85%)] flex-col overflow-hidden rounded-xl"
+        style={{
+          background: 'rgba(28, 28, 30, 0.72)',
+          fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          boxShadow:
+            '0 12px 40px rgba(0,0,0,0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.15)',
+        }}
+      >
+        {/* Search input */}
+        <div className="flex items-center gap-2.5 px-4" style={{ height: 42 }}>
+          <GlobeIcon />
+          <input
+            ref={inputRef}
+            className="flex-1 bg-transparent text-[18px] font-semibold text-white/90 placeholder-white/30 outline-none"
+            style={{
+              fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+            }}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSelectedIdx(0) }}
+            onKeyDown={handleKeyDown}
+            placeholder="Search or enter URL..."
+            autoFocus
+          />
+        </div>
+
+        <div style={{ height: 0.5, margin: '0 12px', background: 'rgba(255,255,255,0.08)' }} />
+
+        {/* Results */}
+        <div className="flex max-h-[200px] flex-col gap-2 overflow-y-auto px-3 py-2.5">
+          {filtered.map((link, i) => (
+            <div
+              key={link.url}
+              className="flex items-center gap-2.5 rounded-lg px-3"
+              style={{
+                height: 32,
+                background: i === selectedIdx ? 'rgba(255,255,255,0.1)' : undefined,
+                cursor: 'default',
+              }}
+              onMouseEnter={() => setSelectedIdx(i)}
+              onClick={() => commit(link.url)}
+            >
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}&sz=32`}
+                width={16}
+                height={16}
+                className="shrink-0 rounded-sm"
+                alt=""
+              />
+              <span
+                className="truncate text-[12px] font-semibold text-white/80"
+                style={{
+                  fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                }}
+              >
+                {link.label}
+              </span>
+              <span className="text-[12px] text-white/20">—</span>
+              <span
+                className="truncate text-[12px] text-white/20"
+                style={{
+                  fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                }}
+              >
+                {link.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+              </span>
+            </div>
+          ))}
+          {showGoogleOption && (
+            <div
+              className="flex items-center gap-2.5 rounded-lg px-3"
+              style={{
+                height: 32,
+                background: selectedIdx === filtered.length ? 'rgba(255,255,255,0.1)' : undefined,
+                cursor: 'default',
+              }}
+              onMouseEnter={() => setSelectedIdx(filtered.length)}
+              onClick={() => commit(`https://www.google.com/search?q=${encodeURIComponent(query)}`)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.2" />
+                <path d="M11 11L14.5 14.5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              <span
+                className="truncate text-[12px] font-semibold text-white/80"
+                style={{
+                  fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                }}
+              >
+                Search Google for "{query}"
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TabCloseButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      className="ml-auto flex shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity group-hover/tab:opacity-100 hover:bg-white/10"
+      style={{ width: 20, height: 20 }}
+      onClick={onClick}
+    >
+      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+        <path d="M1 1L7 7M7 1L1 7" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
+
+function Sidebar({
+  width,
+  activeUrl,
+  items,
+  activeTabId,
+  onDragStart,
+  onToggleSidebar,
+  onResizeStart,
+  onNavigate,
+  onNewTab,
+  onSelectTab,
+  onCloseTab,
+  onToggleFolder,
+  onClose,
+  onMinimize,
+  onFullscreen,
+}: {
+  width: number
+  activeUrl: string
+  items: SidebarNode[]
+  activeTabId: number | null
+  onDragStart: (e: React.PointerEvent) => void
+  onToggleSidebar: () => void
+  onResizeStart: (e: React.PointerEvent) => void
+  onNavigate: (url: string) => void
+  onNewTab: () => void
+  onSelectTab: (id: number) => void
+  onCloseTab: (id: number) => void
+  onToggleFolder: (id: number) => void
+  onClose?: () => void
+  onMinimize?: () => void
+  onFullscreen?: () => void
+}) {
+  return (
+    <div className="relative flex h-full shrink-0 flex-col gap-3 pb-3 pl-2.5 pr-0 pt-2.5" style={{ width }}>
+      {/* Title bar – traffic lights + sidebar toggle, aligned with first tile */}
+      <div
+        className="flex shrink-0 items-center gap-3 px-1"
+        style={{ height: 36, cursor: 'default', touchAction: 'none' }}
+        onPointerDown={onDragStart}
+      >
+        <TrafficLights onClose={onClose} onMinimize={onMinimize} onFullscreen={onFullscreen} />
+        <SidebarToggle onClick={onToggleSidebar} />
+      </div>
+      <PinnedTabs activeUrl={activeUrl} onNavigate={onNavigate} />
+      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
+        {items.map(node => (
+          <SidebarNodeItem
+            key={node.id}
+            node={node}
+            depth={0}
+            activeTabId={activeTabId}
+            onSelectTab={onSelectTab}
+            onCloseTab={onCloseTab}
+            onToggleFolder={onToggleFolder}
+          />
+        ))}
+        <TabItem icon={<PlusIcon />} label="New Tab" onClick={onNewTab} />
+      </div>
+      <div className="flex items-center justify-between">
+        <BinWithStarsIcon />
+        <div style={{ cursor: 'default' }} onClick={onNewTab}>
+          <PlusIcon />
+        </div>
+      </div>
+      {/* Resize handle */}
+      <div
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize"
+        style={{ touchAction: 'none' }}
+        onPointerDown={onResizeStart}
+      />
+    </div>
+  )
+}
+
+const isElectron = navigator.userAgent.includes('Electron')
+
+/* ─── window ─── */
+
+export function ArcWindow({
+  onFocus,
+  zIndex,
+}: {
+  onFocus: () => void
+  zIndex: number
+}) {
+  const [rect, setRect] = useState<Rect>(() => {
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const availH = vh - MENU_BAR_H - DOCK_H
+    const margin = 8
+    const w = Math.min(1200, vw - margin * 2)
+    const h = Math.min(800, availH - margin * 2)
+    const x = Math.round((vw - w) / 2)
+    const y = MENU_BAR_H + margin + Math.round((availH - margin * 2 - h) / 2)
+    return { x, y, w, h }
+  })
+
+  const rectRef = useRef(rect)
+  rectRef.current = rect
+
+  /* ── keep window within viewport on browser resize ── */
+  useEffect(() => {
+    const onResize = () => {
+      setRect((prev) => {
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        const maxW = vw - 20
+        const maxH = vh - MENU_BAR_H - DOCK_H - 20
+        const w = Math.min(prev.w, maxW)
+        const h = Math.min(prev.h, maxH)
+        let x = Math.min(prev.x, vw - w)
+        let y = Math.min(prev.y, vh - DOCK_H - h)
+        if (x < 0) x = 0
+        if (y < MENU_BAR_H) y = MENU_BAR_H
+        return { x, y, w, h }
+      })
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  /* ── navigation state (works for both webview & iframe) ── */
+  const [history, setHistory] = useState<string[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const currentUrl = historyIndex >= 0 ? history[historyIndex] : ''
+  const canGoBack = historyIndex > 0
+  const canGoForward = historyIndex < history.length - 1
+
+  const [webviewLoading, setWebviewLoading] = useState(false)
+  const webviewRef = useRef<HTMLElement>(null)
+  const listenersAttached = useRef(false)
+
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const historyIndexRef = useRef(historyIndex)
+  historyIndexRef.current = historyIndex
+
+  const navigate = useCallback((newUrl: string) => {
+    const idx = historyIndexRef.current
+    setHistory(prev => [...prev.slice(0, idx + 1), newUrl])
+    setHistoryIndex(idx + 1)
+
+    if (isElectron) {
+      const wv = webviewRef.current as any
+      if (wv?.loadURL) wv.loadURL(newUrl)
+    }
+  }, [])
+
+  const goBack = useCallback(() => {
+    if (isElectron) {
+      const wv = webviewRef.current as any
+      if (wv?.canGoBack?.()) wv.goBack()
+    }
+    const idx = historyIndexRef.current
+    if (idx > 0) setHistoryIndex(idx - 1)
+  }, [])
+
+  const goForward = useCallback(() => {
+    if (isElectron) {
+      const wv = webviewRef.current as any
+      if (wv?.canGoForward?.()) wv.goForward()
+    }
+    const idx = historyIndexRef.current
+    if (idx < historyRef.current.length - 1) setHistoryIndex(idx + 1)
+  }, [])
+
+  // Attach webview event listeners (Electron only)
+  useEffect(() => {
+    if (!isElectron) return
+    const wv = webviewRef.current as any
+    if (!wv || listenersAttached.current) return
+
+    const onStart = () => setWebviewLoading(true)
+    const onFinish = () => {
+      setWebviewLoading(false)
+      wv.insertCSS('html, body { max-width: 100vw !important; overflow-x: hidden !important; }').catch(() => {})
+    }
+
+    const onDidNavigate = (e: any) => {
+      if (e.url && e.url !== 'about:blank') {
+        const idx = historyIndexRef.current
+        const prev = historyRef.current
+        if (prev[idx] !== e.url) {
+          setHistory([...prev.slice(0, idx + 1), e.url])
+          setHistoryIndex(idx + 1)
+        }
+      }
+    }
+
+    wv.addEventListener('did-start-loading', onStart)
+    wv.addEventListener('did-finish-load', onFinish)
+    wv.addEventListener('did-fail-load', onFinish)
+    wv.addEventListener('did-navigate', onDidNavigate)
+    wv.addEventListener('did-navigate-in-page', onDidNavigate)
+    listenersAttached.current = true
+  })
+
+  const refreshWebview = useCallback(() => {
+    setWebviewLoading(true)
+    const wv = webviewRef.current as any
+    if (wv?.reload) wv.reload()
+  }, [])
+
+  const stopWebview = useCallback(() => {
+    setWebviewLoading(false)
+    if (isElectron) {
+      const wv = webviewRef.current as any
+      if (wv?.stop) wv.stop()
+    }
+  }, [])
+  const closeApp = useAppStore((s) => s.closeApp)
+  const setFullscreenApp = useAppStore((s) => s.setFullscreenApp)
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [sidebarItems, setSidebarItems] = useState<SidebarNode[]>([
+    { type: 'folder', id: -1, label: '2026', expanded: true, children: [
+      { type: 'folder', id: -2, label: 'Agentic Studio', expanded: true, children: [
+        { type: 'tab', id: 0, url: 'https://www.youtube.com/watch?v=8IcYpOl4Sdk', title: 'Tech Talks EP33 | The Future of Agentic Game Creation' },
+        { type: 'tab', id: -3, url: 'https://about.roblox.com/newsroom/2026/04/roblox-studio-going-agentic', title: 'Roblox Studio is Going Agentic' },
+      ] },
+    ] },
+    { type: 'folder', id: -4, label: '2025', expanded: false, children: [] },
+  ])
+  const nextNodeId = useRef(1)
+  const [activeTabId, setActiveTabId] = useState<number | null>(null)
+  const pendingNewTab = useRef(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), [])
+
+  const handleClose = useCallback(() => {
+    closeApp('arc')
+    setFullscreenApp(null)
+  }, [closeApp, setFullscreenApp])
+  const windowRef = useRef<HTMLDivElement>(null)
+
+  const { outerRef, handleMinimize } = useMinimizeAnimation(
+    'arc',
+    rectRef,
+    windowRef,
+    () => {
+      if (fullscreen) {
+        setFullscreen(false)
+        setFullscreenApp(null)
+      }
+    },
+  )
+
+  const handleFullscreen = useCallback(() => {
+    if (fullscreen) {
+      if (preFullscreenRect) setRect(preFullscreenRect)
+      setFullscreen(false)
+      setFullscreenApp(null)
+    } else {
+      setPreFullscreenRect(rect)
+      setRect({
+        x: 0,
+        y: 0,
+        w: window.innerWidth,
+        h: window.innerHeight,
+      })
+      setFullscreen(true)
+      setFullscreenApp('arc')
+    }
+  }, [fullscreen, rect, preFullscreenRect, setFullscreenApp])
+
+  const topbarColor = useFaviconColor(currentUrl)
+
+  const sidebarWidthRef = useRef(sidebarWidth)
+  sidebarWidthRef.current = sidebarWidth
+
+  const dragRef = useRef<{
+    startX: number
+    startY: number
+    startRect: Rect
+    mode: Dir | 'move'
+  } | null>(null)
+
+  const sidebarDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  const [dragging, setDragging] = useState(false)
+  const [sidebarDragging, setSidebarDragging] = useState(false)
+
+  const startSidebarResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    sidebarDragRef.current = { startX: e.clientX, startWidth: sidebarWidthRef.current }
+    setSidebarDragging(true)
+  }, [])
+
+  useEffect(() => {
+    if (!sidebarDragging) return
+
+    const onMove = (e: PointerEvent) => {
+      if (!sidebarDragRef.current) return
+      const dx = e.clientX - sidebarDragRef.current.startX
+      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sidebarDragRef.current.startWidth + dx)))
+    }
+
+    const onUp = () => {
+      sidebarDragRef.current = null
+      setSidebarDragging(false)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [sidebarDragging])
+
+  const startDrag = useCallback(
+    (mode: Dir | 'move', e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      onFocus()
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startRect: { ...rectRef.current },
+        mode,
+      }
+      setDragging(true)
+    },
+    [onFocus],
+  )
+
+  useEffect(() => {
+    if (!dragging) return
+
+    const onMove = (e: PointerEvent) => {
+      if (!dragRef.current) return
+      const { startX, startY, startRect, mode } = dragRef.current
+      const dx = e.clientX - startX
+      const dy = e.clientY - startY
+
+      if (mode === 'move') {
+        setRect(clampMove({ ...startRect, x: startRect.x + dx, y: startRect.y + dy }))
+      } else {
+        setRect(applyResize(startRect, mode, dx, dy))
+      }
+    }
+
+    const onUp = () => {
+      dragRef.current = null
+      setDragging(false)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [dragging])
+
+  return (
+    <div
+      ref={outerRef}
+      className="absolute"
+      style={{
+        left: rect.x,
+        top: rect.y,
+        width: rect.w,
+        height: rect.h,
+        zIndex,
+        userSelect: dragging || sidebarDragging ? 'none' : undefined,
+        transition: fullscreen || preFullscreenRect ? 'left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease' : undefined,
+      }}
+      onPointerDown={onFocus}
+    >
+      {/* Window chrome */}
+      <div
+        ref={windowRef}
+        className="flex h-full w-full overflow-hidden"
+        style={{
+          borderRadius: fullscreen ? 0 : 18,
+          background: 'rgba(4, 6, 24, 0.5)',
+          backdropFilter: 'blur(32.5px)',
+          WebkitBackdropFilter: 'blur(32.5px)',
+          boxShadow:
+            '0 25px 50px -12px rgba(0, 0, 0, 0.25), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12)',
+        }}
+      >
+        <div
+          className="shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out"
+          style={{ marginLeft: sidebarCollapsed ? -sidebarWidth : 0 }}
+        >
+          <Sidebar
+            width={sidebarWidth}
+            activeUrl={currentUrl}
+            items={sidebarItems}
+            activeTabId={activeTabId}
+            onDragStart={(e) => startDrag('move', e)}
+            onToggleSidebar={toggleSidebar}
+            onResizeStart={startSidebarResize}
+            onNavigate={navigate}
+            onNewTab={() => { pendingNewTab.current = true; setSearchOpen(true) }}
+            onSelectTab={(id) => {
+              const tab = findTab(sidebarItems, id)
+              if (tab) { navigate(tab.url); setActiveTabId(id) }
+            }}
+            onCloseTab={(id) => {
+              setSidebarItems(prev => removeNode(prev, id))
+              if (activeTabId === id) {
+                const allTabs = findAllTabs(sidebarItems).filter(t => t.id !== id)
+                if (allTabs.length > 0) {
+                  const last = allTabs[allTabs.length - 1]
+                  setActiveTabId(last.id)
+                  navigate(last.url)
+                } else {
+                  setActiveTabId(null)
+                }
+              }
+            }}
+            onToggleFolder={(id) => setSidebarItems(prev => toggleFolder(prev, id))}
+            onClose={handleClose}
+            onMinimize={handleMinimize}
+            onFullscreen={handleFullscreen}
+          />
+        </div>
+
+        {/* Content area with frame border (draggable) */}
+        <div
+          className="relative min-w-0 flex-1 p-2.5"
+          style={{ cursor: 'default', touchAction: 'none' }}
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) startDrag('move', e)
+          }}
+        >
+          {/* Sidebar resize handle on left edge of content area */}
+          {!sidebarCollapsed && (
+            <div
+              className="group absolute left-0 top-0 z-10 h-full w-2.5 cursor-col-resize"
+              style={{ touchAction: 'none' }}
+              onPointerDown={startSidebarResize}
+            >
+              <div className="absolute left-1/2 top-2 bottom-2 w-[3px] -translate-x-1/2 rounded-full bg-white/0 transition-colors duration-150 group-hover:bg-white/25" />
+            </div>
+          )}
+          <div
+            className="relative flex h-full flex-col overflow-hidden"
+            style={{
+              borderRadius: 10,
+              boxShadow: 'inset 0 0 0 0.5px rgba(255, 255, 255, 0.12)',
+              background: 'rgba(255, 255, 255, 0.03)',
+            }}
+          >
+            <ArcTopbar
+              color={topbarColor}
+              url={currentUrl}
+              sidebarCollapsed={sidebarCollapsed}
+              canGoBack={canGoBack}
+              canGoForward={canGoForward}
+              onToggleSidebar={toggleSidebar}
+              onBack={goBack}
+              onForward={goForward}
+              onRefresh={refreshWebview}
+              onStop={stopWebview}
+              onOpenSearch={() => setSearchOpen(true)}
+              loading={webviewLoading}
+            />
+            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+              {currentUrl ? (
+                isElectron ? (
+                  <webview
+                    ref={webviewRef as any}
+                    src={currentUrl}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: dragging || sidebarDragging ? 'none' : 'auto',
+                    }}
+                  />
+                ) : (
+                  <ProxiedIframe url={currentUrl} dragging={dragging || sidebarDragging} />
+                )
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search dialog */}
+      {searchOpen && (
+        <SearchDialog
+          url={currentUrl}
+          onNavigate={(u) => {
+            navigate(u)
+            if (pendingNewTab.current) {
+              const id = nextNodeId.current++
+              const newTab: TabNode = { type: 'tab', id, url: u }
+              // Add new tab inside the first folder (Tools)
+              setSidebarItems(prev => addTabToFolder(prev, -1, newTab))
+              setActiveTabId(id)
+              pendingNewTab.current = false
+            } else if (activeTabId != null) {
+              setSidebarItems(prev => updateTabUrl(prev, activeTabId, u))
+            }
+            setSearchOpen(false)
+          }}
+          onClose={() => { setSearchOpen(false); pendingNewTab.current = false }}
+        />
+      )}
+
+      {/* Resize handles */}
+      {ALL_DIRS.map((dir) => (
+        <div
+          key={dir}
+          style={{ ...handleStyle(dir), touchAction: 'none' }}
+          onPointerDown={(e) => startDrag(dir, e)}
+        />
+      ))}
+    </div>
+  )
+}

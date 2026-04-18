@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Global defaults (macOS-ish, with system-based light/dark). */
+:root {
+  /* Brand accent placeholder (override later with your actual brand). */
+  --brand-accent: 124 58 237; /* rgb */
+
+  /* Let form controls and scrollbars follow system theme. */
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+@keyframes dock-bounce {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(-20px); }
+  100% { transform: translateY(0); }
+}
+
+body {
+  margin: 0;
+  font-family: "SF Pro", -apple-system, BlinkMacSystemFont, sans-serif,
+    "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, "Noto Sans",
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Notes editor (contentEditable) ─── */
+
+.notes-editor h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.90);
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+
+.notes-editor h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 16px 0 4px;
+  line-height: 1.3;
+}
+
+.notes-editor h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.80);
+  margin: 12px 0 4px;
+  line-height: 1.4;
+}
+
+.notes-editor p {
+  margin: 4px 0;
+}
+
+/* Imported note HTML often uses p.p1 with inline black / Helvetica; normalize for dark UI. */
+.notes-editor p.p1,
+.notes-editor p.p1 span {
+  color: rgba(255, 255, 255, 1) !important;
+}
+
+.notes-editor p.p1 {
+  font-size: 13px !important;
+  font-family:
+    "SF Pro", -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.notes-editor p.p1 span {
+  font-size: 13px !important;
+  font-family:
+    "SF Pro", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 400 !important;
+}
+
+.notes-editor ul,
+.notes-editor ol {
+  margin: 6px 0;
+  padding-left: 24px;
+}
+
+.notes-editor li {
+  margin: 2px 0;
+}
+
+.notes-editor strong {
+  font-weight: 600;
+}
+
+.notes-editor a {
+  color: #FFC149;
+  text-decoration: underline;
+}
+
+.notes-editor .checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  margin-left: 0;
+}
+
+.notes-editor .checklist-item input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.30);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+  margin-left: -1px;
+}
+
+.notes-editor .checklist-item input[type="checkbox"]:checked {
+  border: none;
+  background: #FFB400;
+  -webkit-mask: url('/notes/checkmark circle fill.svg') center/contain no-repeat;
+  mask: url('/notes/checkmark circle fill.svg') center/contain no-repeat;
+}
