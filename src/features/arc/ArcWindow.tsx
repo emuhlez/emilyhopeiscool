@@ -750,21 +750,74 @@ function getYouTubeEmbedUrl(url: string): string | null {
   }
 }
 
+// Proxy cache to avoid re-fetching pages we've already loaded
+const proxyCache = new Map<string, string>()
+
+// URLs that should be prefetched on first load (sidebar bookmarks + saved links)
+const BOOKMARK_URLS = [
+  'https://about.roblox.com/newsroom/2026/04/roblox-studio-going-agentic',
+  'https://devforum.roblox.com/t/announcing-planning-mode-for-roblox-assistant/4580715',
+  ...SAVED_LINKS.map(l => l.url),
+]
+
+// Prefetch bookmarked & saved links on first load
+let prefetchStarted = false
+function prefetchSavedLinks() {
+  if (prefetchStarted) return
+  prefetchStarted = true
+  BOOKMARK_URLS.forEach(url => {
+    if (getYouTubeEmbedUrl(url)) return
+    fetch(`/api/iframe-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, mode: 'proxy' }),
+    })
+      .then(r => r.ok ? r.blob() : null)
+      .then(blob => {
+        if (blob) proxyCache.set(url, URL.createObjectURL(blob))
+      })
+      .catch(() => {})
+  })
+}
+
 function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  // Double-buffer: keep the previous iframe visible while new one loads
+  const [prevBlobUrl, setPrevBlobUrl] = useState<string | null>(null)
+  const [showNew, setShowNew] = useState(false)
   const embedUrl = getYouTubeEmbedUrl(url)
+  const prevUrlRef = useRef<string | null>(null)
 
-  // For non-YouTube URLs, fetch via POST to avoid URI length limits
+  // Trigger prefetch on mount
+  useEffect(() => { prefetchSavedLinks() }, [])
+
   useEffect(() => {
     if (embedUrl) {
       setBlobUrl(null)
+      setPrevBlobUrl(null)
+      setShowNew(true)
       setStatus('loading')
       return
     }
 
+    // Check cache first
+    const cached = proxyCache.get(url)
+    if (cached) {
+      setPrevBlobUrl(blobUrl)
+      setBlobUrl(cached)
+      setStatus('loaded')
+      setShowNew(false)
+      // Small delay then reveal
+      requestAnimationFrame(() => setShowNew(true))
+      return
+    }
+
     setStatus('loading')
-    let revoke: string | null = null
+    setShowNew(false)
+    // Keep previous blob visible during load
+    if (blobUrl) setPrevBlobUrl(blobUrl)
+    let cancelled = false
 
     fetch(`/api/iframe-check`, {
       method: 'POST',
@@ -776,17 +829,31 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
         return r.blob()
       })
       .then(blob => {
+        if (cancelled) return
         const objectUrl = URL.createObjectURL(blob)
-        revoke = objectUrl
+        proxyCache.set(url, objectUrl)
         setBlobUrl(objectUrl)
         setStatus('loaded')
       })
-      .catch(() => setStatus('error'))
+      .catch(() => { if (!cancelled) setStatus('error') })
 
-    return () => { if (revoke) URL.revokeObjectURL(revoke) }
+    prevUrlRef.current = url
+
+    return () => {
+      cancelled = true
+      // Don't revoke - it's in the cache now
+    }
   }, [url, embedUrl])
 
-  if (status === 'error') {
+  // Crossfade: once new iframe loads, reveal it
+  const handleNewLoad = () => {
+    setShowNew(true)
+    setStatus('loaded')
+    // Clean up prev after transition
+    setTimeout(() => setPrevBlobUrl(null), 300)
+  }
+
+  if (status === 'error' && !prevBlobUrl) {
     return <SitePreview url={url} />
   }
 
@@ -794,16 +861,44 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
 
   return (
     <>
-      {(status === 'loading' || status === 'checking' as string) && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
-            />
-            <span className="text-[12px] text-white/30">Loading...</span>
-          </div>
+      {/* Progress bar at top during loading */}
+      {status === 'loading' && (
+        <div className="absolute top-0 left-0 right-0 z-10" style={{ height: 2 }}>
+          <div
+            className="h-full rounded-full"
+            style={{
+              background: 'rgba(255,255,255,0.6)',
+              animation: 'arcProgress 1.5s ease-in-out infinite',
+            }}
+          />
+          <style>{`
+            @keyframes arcProgress {
+              0% { width: 0%; margin-left: 0; }
+              50% { width: 60%; margin-left: 10%; }
+              100% { width: 0%; margin-left: 100%; }
+            }
+          `}</style>
         </div>
       )}
+      {/* Previous iframe stays visible during transition */}
+      {prevBlobUrl && !showNew && (
+        <iframe
+          src={prevBlobUrl}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            pointerEvents: 'none',
+            opacity: 0.5,
+            transition: 'opacity 0.2s ease-out',
+          }}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+          allow="autoplay; encrypted-media; picture-in-picture"
+        />
+      )}
+      {/* New iframe fades in */}
       {iframeSrc && (
         <iframe
           src={iframeSrc}
@@ -814,12 +909,23 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
             height: '100%',
             border: 'none',
             pointerEvents: dragging ? 'none' : 'auto',
+            opacity: showNew ? 1 : 0,
+            transition: 'opacity 0.2s ease-in',
           }}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
           allow="autoplay; encrypted-media; picture-in-picture"
-          onLoad={() => setStatus('loaded')}
+          onLoad={handleNewLoad}
           onError={() => setStatus('error')}
         />
+      )}
+      {/* Initial full-screen loader only if nothing to show yet */}
+      {status === 'loading' && !prevBlobUrl && !blobUrl && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
+          <div className="flex flex-col items-center gap-3">
+            <div className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+            <span className="text-[12px] text-white/30">Loading...</span>
+          </div>
+        </div>
       )}
     </>
   )
@@ -1123,8 +1229,9 @@ export function ArcWindow({
   }, [])
 
   /* ── navigation state (works for both webview & iframe) ── */
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
+  const INITIAL_URL = 'https://www.youtube.com/watch?v=8IcYpOl4Sdk'
+  const [history, setHistory] = useState<string[]>([INITIAL_URL])
+  const [historyIndex, setHistoryIndex] = useState(0)
   const currentUrl = historyIndex >= 0 ? history[historyIndex] : ''
   const canGoBack = historyIndex > 0
   const canGoForward = historyIndex < history.length - 1
@@ -1241,7 +1348,7 @@ export function ArcWindow({
     { type: 'folder', id: -4, label: '2025', expanded: false, children: [] },
   ])
   const nextNodeId = useRef(1)
-  const [activeTabId, setActiveTabId] = useState<number | null>(null)
+  const [activeTabId, setActiveTabId] = useState<number | null>(0)
   const pendingNewTab = useRef(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
