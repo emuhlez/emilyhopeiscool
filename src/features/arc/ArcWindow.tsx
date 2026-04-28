@@ -1181,7 +1181,13 @@ function Sidebar({
   )
 }
 
-const isElectron = navigator.userAgent.includes('Electron')
+// Detect Electron via the preload-exposed flag. Falls back to UA sniffing for
+// older/legacy bundles, but the preload flag is authoritative — UA strings
+// alone are unreliable (some browsers' embeds carry "Electron" in their UA).
+const isElectron =
+  typeof window !== 'undefined' &&
+  ((window as unknown as { isElectronApp?: boolean }).isElectronApp === true ||
+    (typeof (window as unknown as { process?: { versions?: { electron?: string } } }).process?.versions?.electron === 'string'))
 
 /* ─── window ─── */
 

@@ -162,10 +162,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   /* ── proxy mode (default): fetch & serve HTML with nav interception ── */
 
   try {
+    // Use a crawler User-Agent so SPA-heavy sites (Discourse, etc.) return their
+    // SSR'd / crawler-fallback HTML with real article content baked in. Sites
+    // that don't differentiate by UA (Next.js, most static-SSR) return the same
+    // HTML they would for any UA.
     const upstream = await fetch(target.href, {
       redirect: 'follow',
       headers: {
-        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.9',
       },
@@ -187,14 +191,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Remove existing base tags
     html = html.replace(/<base\s[^>]*>/gi, '')
 
-    // Inject base tag + navigation interception script
+    // Strip ALL original <script> tags. The page is loaded from a blob: URL with
+    // a UUID path, so SPA frameworks (Next.js, React Router, etc.) crash during
+    // hydration when they see window.location.pathname doesn't match the route
+    // they were rendered for. The static SSR'd HTML renders fine on its own —
+    // we only need our injected nav-interception script to run.
+    html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Also strip preload/modulepreload that would re-fetch JS bundles.
+    html = html.replace(/<link[^>]*rel\s*=\s*["']?(?:modulepreload|preload)["']?[^>]*>/gi, '')
+
+    // Default font fallback. Crawler-fallback HTML from sites like Discourse
+    // omits the inline <style> blocks that set the body font, leaving the iframe
+    // rendering everything in the browser-default serif (Times New Roman). Force
+    // a clean system-sans baseline; site-specific CSS still overrides where set.
+    // Two prongs: (1) define the CSS variables Discourse-style themes reference,
+    // (2) add an !important universal rule as a hard backstop. Injected at end
+    // of </head> so it wins the cascade over external stylesheet links.
+    const fontFallback = `<style id="__proxy_font_fallback">
+      :root {
+        --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+        --heading-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+        --font-monospace: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        --font-family--monospace: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      }
+      html, body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, li, a, blockquote, .ember-view, .topic-body, .cooked, .post, .topic-list, .title {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+      }
+      code, pre, kbd, samp, .monospace, tt, .hljs {
+        font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      }
+    </style>`
+
+    // Inject base tag + nav script at the START of <head>, and the font
+    // fallback at the END of </head> so it wins the cascade.
     const baseTag = `<base href="${target.origin}/">`
-    const injection = baseTag + NAV_INTERCEPT_SCRIPT
+    const headStart = baseTag + NAV_INTERCEPT_SCRIPT
 
     if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/<head([^>]*)>/i, `<head$1>${injection}`)
+      html = html.replace(/<head([^>]*)>/i, `<head$1>${headStart}`)
+      if (/<\/head>/i.test(html)) {
+        html = html.replace(/<\/head>/i, `${fontFallback}</head>`)
+      } else {
+        html += fontFallback
+      }
     } else {
-      html = injection + html
+      html = headStart + fontFallback + html
     }
 
     // Set permissive response headers
