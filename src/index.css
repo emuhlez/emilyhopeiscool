@@ -57,7 +57,7 @@ body {
 }
 
 .notes-editor p {
-  margin: 4px 0;
+  margin: 4px 0 1em;
 }
 
 /* Imported note HTML often uses p.p1 with inline black / Helvetica; normalize for dark UI. */
