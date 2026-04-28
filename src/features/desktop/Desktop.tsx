@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Wallpaper } from './Wallpaper'
 import { Dock, DockIcon } from '../dock/Dock'
 import { MenuBar } from '../menu-bar/MenuBar'
@@ -147,6 +147,17 @@ export function Desktop() {
   const windowOrder = useAppStore((s) => s.windowOrder)
   const focusApp = useAppStore((s) => s.focusApp)
   const unminimizeApp = useAppStore((s) => s.unminimizeApp)
+
+  const openApp = useAppStore((s) => s.openApp)
+
+  // Auto-open Notes on first visit
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('has-visited')
+    if (!hasVisited) {
+      localStorage.setItem('has-visited', '1')
+      openApp('notes')
+    }
+  }, [openApp])
 
   const focusedApp = APP_REGISTRY[focusedAppId] ?? APP_REGISTRY.finder
   const isFullscreen = fullscreenAppId !== null
