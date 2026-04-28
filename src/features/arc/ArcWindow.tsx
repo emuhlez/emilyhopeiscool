@@ -751,7 +751,24 @@ function getYouTubeEmbedUrl(url: string): string | null {
 }
 
 // Proxy cache to avoid re-fetching pages we've already loaded
+// Uses an LRU approach: evict oldest entries when cache exceeds MAX size
+const MAX_PROXY_CACHE = 20
 const proxyCache = new Map<string, string>()
+
+function proxyCacheSet(url: string, blobUrl: string) {
+  // If already cached, delete first so re-insertion moves it to the end (most recent)
+  if (proxyCache.has(url)) {
+    proxyCache.delete(url)
+  }
+  proxyCache.set(url, blobUrl)
+  // Evict oldest entries
+  while (proxyCache.size > MAX_PROXY_CACHE) {
+    const oldest = proxyCache.keys().next().value!
+    const oldBlobUrl = proxyCache.get(oldest)!
+    proxyCache.delete(oldest)
+    URL.revokeObjectURL(oldBlobUrl)
+  }
+}
 
 // URLs that should be prefetched on first load (sidebar bookmarks + saved links)
 const BOOKMARK_URLS = [
@@ -774,7 +791,7 @@ function prefetchSavedLinks() {
     })
       .then(r => r.ok ? r.blob() : null)
       .then(blob => {
-        if (blob) proxyCache.set(url, URL.createObjectURL(blob))
+        if (blob) proxyCacheSet(url, URL.createObjectURL(blob))
       })
       .catch(() => {})
   })
@@ -831,7 +848,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
       .then(blob => {
         if (cancelled) return
         const objectUrl = URL.createObjectURL(blob)
-        proxyCache.set(url, objectUrl)
+        proxyCacheSet(url, objectUrl)
         setBlobUrl(objectUrl)
         setStatus('loaded')
       })
@@ -853,7 +870,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
     setTimeout(() => setPrevBlobUrl(null), 300)
   }
 
-  if (status === 'error' && !prevBlobUrl) {
+  if (status === 'error') {
     return <SitePreview url={url} />
   }
 
