@@ -1,1 +1,3 @@
-// Preload script — placeholder for future IPC bridges
+import { contextBridge } from 'electron'
+
+contextBridge.exposeInMainWorld('isElectronApp', true)
