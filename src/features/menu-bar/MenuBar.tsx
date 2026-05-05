@@ -180,7 +180,7 @@ export function MenuBar({
           fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
           fontSize: 12,
           color: 'white',
-          background: fullscreen ? 'rgba(0, 0, 0, 0.85)' : undefined,
+          background: fullscreen ? 'rgba(0, 0, 0, 0.85)' : 'transparent',
           zIndex: fullscreen ? 50 : 30,
           opacity: visible ? 1 : 0,
           transition: 'opacity 0.2s ease',
@@ -216,10 +216,10 @@ export function MenuBar({
       </svg>
       )}
 
-      {/* Left side */}
-      <div className="relative z-10 flex items-center gap-1">
+      {/* Left cluster — app + menu items. Allowed to clip first under narrow widths. */}
+      <div className="relative z-10 flex min-w-0 items-center gap-1 overflow-hidden">
         <button
-          className="relative flex items-center rounded-[7px] px-2.5 opacity-90"
+          className="relative flex shrink-0 items-center whitespace-nowrap rounded-[7px] px-2.5 opacity-90"
           style={{ height: 25 }}
           onClick={() => handleItemClick('apple')}
           aria-label="Apple menu"
@@ -228,7 +228,7 @@ export function MenuBar({
           <span className="relative z-10"><AppleLogo /></span>
         </button>
         <button
-          className={`relative flex items-center rounded-[7px] px-2.5 ${fullscreen ? 'opacity-85 font-medium' : 'font-bold'}`}
+          className={`relative flex shrink-0 items-center whitespace-nowrap rounded-[7px] px-2.5 ${fullscreen ? 'opacity-85 font-medium' : 'font-bold'}`}
           style={{ height: 25 }}
           onClick={() => handleItemClick('appName')}
         >
@@ -238,7 +238,7 @@ export function MenuBar({
         {menuItems.map((item) => (
           <button
             key={item}
-            className="relative flex items-center rounded-[7px] px-2.5 opacity-85 font-medium"
+            className="relative flex shrink-0 items-center whitespace-nowrap rounded-[7px] px-2.5 opacity-85 font-medium"
             style={{ height: 25 }}
             onClick={() => handleItemClick(item)}
           >
@@ -248,22 +248,22 @@ export function MenuBar({
         ))}
       </div>
 
-      {/* Right side */}
-      <div className="relative z-10 flex items-center gap-0.5">
+      {/* Right cluster — control center + date/time. Pinned: never shrinks, never wraps. */}
+      <div className="relative z-10 flex shrink-0 items-center gap-0.5">
         <button
-          className="relative flex items-center rounded-[7px] px-2.5 opacity-85 font-medium"
+          className="relative flex shrink-0 items-center whitespace-nowrap rounded-[7px] px-2.5 opacity-85 font-medium"
           style={{ height: 25 }}
           onClick={() => handleItemClick('controlCenter')}
-
           aria-label="Control Center"
         >
           {activeItem === 'controlCenter' && <MenuItemSelection />}
           <span className="relative z-10"><ControlCenterIcon /></span>
         </button>
         <button
-          className="relative flex items-center gap-1.5 rounded-[7px] px-2.5 opacity-85 font-medium"
+          className="relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 opacity-85 font-medium"
           style={{ height: 25 }}
           onClick={() => handleItemClick('datetime')}
+          aria-label={`${date} ${time}`}
         >
           {activeItem === 'datetime' && <MenuItemSelection />}
           <span className="relative z-10">{date}</span>

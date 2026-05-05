@@ -54,7 +54,7 @@ export function DockIcon({
 
   return (
     <div
-      className="group relative flex flex-col items-center justify-center"
+      className="group relative flex shrink-0 flex-col items-center justify-center"
       onClick={handleClick}
     >
       <div
@@ -106,25 +106,27 @@ export function DockIcon({
   )
 }
 
-function DockBackground({
-  children,
-  scale = 1,
-}: {
-  children?: ReactNode
-  scale?: number
-}) {
+function DockBackground({ children }: { children?: ReactNode }) {
   return (
     <div
-      className="pointer-events-auto flex items-end justify-center [&>img.size-\[var\(--dock-icon-size\)\]]:p-0"
+      className="pointer-events-auto flex w-fit items-end [&>img.size-\[var\(--dock-icon-size\)\]]:p-0"
       style={{
-        gap: `${8 * scale}px`,
-        borderRadius: `${16 * scale}px`,
-        padding: `${8 * scale}px ${10 * scale}px ${2 * scale}px`,
+        // Pill metrics derive from the live --dock-icon-size so they shrink with
+        // the icons on viewport resize. Ratios match the original 36px design
+        // (gap 8, padding 8/10/2, radius 16).
+        gap: 'calc(var(--dock-icon-size) * 8 / 36)',
+        borderRadius: 'calc(var(--dock-icon-size) * 16 / 36)',
+        padding:
+          'calc(var(--dock-icon-size) * 8 / 36) calc(var(--dock-icon-size) * 10 / 36) calc(var(--dock-icon-size) * 2 / 36)',
         background: 'rgba(246, 246, 246, 0.36)',
         backdropFilter: 'blur(68px)',
         WebkitBackdropFilter: 'blur(68px)',
         boxShadow:
           '0 0 6px rgba(0, 0, 0, 0.15), inset 0 0 0 0.5px rgba(26, 26, 26, 0.46)',
+        transition: 'width 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+        // Opt in to interpolating between intrinsic widths (Chromium 129+, Safari 26+).
+        // Older browsers ignore this and the dock simply snaps between widths.
+        ['interpolateSize' as string]: 'allow-keywords',
       }}
     >
       {children}
@@ -139,19 +141,28 @@ export function Dock({
   children?: ReactNode
   iconSize?: number
 }) {
-  const scale = iconSize / 36
+  // Fluid icon size: linearly interpolate between 22px @ ~400px viewport and
+  // iconSize px @ ~1280px viewport, clamped at both ends. Math:
+  //   y = m·vw + b, with m = (iconSize − 22)/880 px-per-px (× 100 → vw%)
+  //   b = 22 − 400·m
+  // Default (iconSize=36) → clamp(22px, calc(1.591vw + 15.64px), 36px):
+  //   320vw → 22px (clamp min, still tappable),
+  //   ~900vw → ~30px (visibly shrinking),
+  //   ≥1280vw → 36px (clamp max, original look).
+  const slopeVw = ((iconSize - 22) / 8.8).toFixed(3)
+  const offsetPx = (22 - (400 * (iconSize - 22)) / 880).toFixed(2)
+  const fluidIconSize = `clamp(22px, calc(${slopeVw}vw + ${offsetPx}px), ${iconSize}px)`
+
   return (
     <nav
       aria-label="Dock"
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3"
       style={{
         paddingBottom: 'max(env(safe-area-inset-bottom), 4px)',
-        ['--dock-icon-size' as string]: `${iconSize}px`,
+        ['--dock-icon-size' as string]: fluidIconSize,
       }}
     >
-      <div className="mx-auto w-fit max-w-[min(92vw,720px)] px-3">
-        <DockBackground scale={scale}>{children}</DockBackground>
-      </div>
+      <DockBackground>{children}</DockBackground>
     </nav>
   )
 }

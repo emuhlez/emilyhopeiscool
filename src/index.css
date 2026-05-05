@@ -121,6 +121,25 @@ body {
   margin-left: -1px;
 }
 
+/* ─── Arc sidebar thin scrollbar ─── */
+
+.arc-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.arc-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.arc-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.arc-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .notes-editor .checklist-item input[type="checkbox"]:checked {
   border: none;
   background: #FFB400;

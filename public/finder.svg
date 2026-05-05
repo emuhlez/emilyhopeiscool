@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E8E8E8"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6EC6FF"/>
+      <stop offset="100%" stop-color="#1B9CFC"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="112" height="112" rx="24" ry="24" fill="url(#bg)"/>
+  <!-- Face shape -->
+  <rect x="25" y="18" width="70" height="88" rx="16" ry="16" fill="url(#face)" stroke="#C0C0C0" stroke-width="1"/>
+  <!-- Left eye -->
+  <ellipse cx="45" cy="48" rx="6" ry="10" fill="#333"/>
+  <!-- Right eye -->
+  <ellipse cx="75" cy="48" rx="6" ry="10" fill="#333"/>
+  <!-- Nose line -->
+  <line x1="60" y1="55" x2="60" y2="72" stroke="#999" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Mouth -->
+  <path d="M42 78 Q50 90 60 82 Q70 90 78 78" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Eyebrow (right, raised) -->
+  <path d="M68 32 Q76 26 84 30" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

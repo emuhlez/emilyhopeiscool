@@ -76,7 +76,7 @@ function MinimizedSnapshot({
 }) {
   return (
     <div
-      className="group relative flex flex-col items-center justify-center"
+      className="group relative flex shrink-0 flex-col items-center justify-center"
       onClick={onClick}
     >
       {/* Tooltip */}

@@ -774,6 +774,7 @@ function proxyCacheSet(url: string, blobUrl: string) {
 const BOOKMARK_URLS = [
   'https://about.roblox.com/newsroom/2026/04/roblox-studio-going-agentic',
   'https://devforum.roblox.com/t/announcing-planning-mode-for-roblox-assistant/4580715',
+  'https://www.youtube.com/watch?v=PVlCHE9pc50&t=12915',
   ...SAVED_LINKS.map(l => l.url),
 ]
 
@@ -969,7 +970,7 @@ function SearchDialog({ url, onNavigate, onClose }: { url: string; onNavigate: (
   const commit = useCallback((targetUrl?: string) => {
     const finalTarget = targetUrl || query.trim()
     if (!finalTarget) { onClose(); return }
-    let u = finalTarget
+    const u = finalTarget
     if (/^https?:\/\//i.test(u)) {
       // Already a full URL
       onNavigate(u)
@@ -1168,7 +1169,7 @@ function Sidebar({
         <SidebarToggle onClick={onToggleSidebar} />
       </div>
       <PinnedTabs activeUrl={activeUrl} onNavigate={onNavigate} />
-      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
+      <div className="arc-sidebar-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden pr-1">
         {items.map(node => (
           <SidebarNodeItem
             key={node.id}
@@ -1180,7 +1181,6 @@ function Sidebar({
             onToggleFolder={onToggleFolder}
           />
         ))}
-        <TabItem icon={<PlusIcon />} label="New Tab" onClick={onNewTab} />
       </div>
       <div className="flex items-center justify-between">
         <BinWithStarsIcon />
@@ -1368,7 +1368,12 @@ export function ArcWindow({
         { type: 'tab', id: -5, url: 'https://devforum.roblox.com/t/announcing-planning-mode-for-roblox-assistant/4580715', title: 'Announcing Planning Mode for Roblox Assistant' },
       ] },
     ] },
-    { type: 'folder', id: -4, label: '2025', expanded: false, children: [] },
+    { type: 'folder', id: -4, label: '2025', expanded: true, children: [
+      { type: 'folder', id: -6, label: 'Reimport', expanded: false, children: [
+        { type: 'tab', id: -7, url: 'https://www.youtube.com/watch?v=PVlCHE9pc50&t=12915', title: 'Opening Keynote | RDC 2025' },
+        { type: 'tab', id: -8, url: 'https://create.roblox.com/docs/art/modeling/reimport', title: 'Reimport' },
+      ] },
+    ] },
   ])
   const nextNodeId = useRef(1)
   const [activeTabId, setActiveTabId] = useState<number | null>(0)

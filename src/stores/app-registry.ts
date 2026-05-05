@@ -9,6 +9,7 @@ import messagesIconUrl from '../../dock icons/Messages.svg?url'
 import trashIconUrl from '../../dock icons/Trash.svg?url'
 import { ArcWindow } from '../features/arc/ArcWindow'
 import { NotesWindow } from '../features/notes/NotesWindow'
+import { PhotosWindow } from '../features/photos/PhotosWindow'
 
 export interface AppDefinition {
   id: string
@@ -56,6 +57,7 @@ export const APP_REGISTRY: Record<string, AppDefinition> = {
     name: 'Photos',
     menuItems: ['File', 'Edit', 'Image', 'View', 'Window', 'Help'],
     iconUrl: photosIconUrl,
+    windowComponent: PhotosWindow,
   },
   messages: {
     id: 'messages',
