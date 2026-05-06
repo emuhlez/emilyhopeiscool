@@ -18,12 +18,13 @@ interface Rect {
 
 const MENU_BAR_H = 28
 const DOCK_H = 70
-const MIN_W = 520
+const MIN_W = 300
 const MIN_H = 400
 const HANDLE = 6
 const SIDEBAR_DEFAULT = 260
 const SIDEBAR_MIN = 180
 const SIDEBAR_MAX = 400
+const MOBILE_BREAKPOINT = 640
 
 const CURSORS: Record<Dir, string> = {
   n: 'ns-resize',
@@ -113,10 +114,13 @@ export function NotesWindow({
   const [rect, setRect] = useState<Rect>(() => {
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const w = Math.min(900, vw - 40)
-    const h = Math.min(620, vh - MENU_BAR_H - DOCK_H - 40)
-    const x = Math.round((vw - w) / 2)
-    const y = MENU_BAR_H + Math.round((vh - MENU_BAR_H - DOCK_H - h) / 2)
+    const isMobile = vw < MOBILE_BREAKPOINT
+    const w = isMobile ? vw : Math.min(900, vw - 40)
+    const h = isMobile
+      ? vh - MENU_BAR_H - DOCK_H
+      : Math.min(620, vh - MENU_BAR_H - DOCK_H - 40)
+    const x = isMobile ? 0 : Math.round((vw - w) / 2)
+    const y = MENU_BAR_H + (isMobile ? 0 : Math.round((vh - MENU_BAR_H - DOCK_H - h) / 2))
     return { x, y, w, h }
   })
 
@@ -147,7 +151,7 @@ export function NotesWindow({
   const closeApp = useAppStore((s) => s.closeApp)
   const setFullscreenApp = useAppStore((s) => s.setFullscreenApp)
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < MOBILE_BREAKPOINT)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [fullscreen, setFullscreen] = useState(false)
   const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)

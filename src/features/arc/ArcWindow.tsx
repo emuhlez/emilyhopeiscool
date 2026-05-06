@@ -85,12 +85,13 @@ interface Rect {
 
 const MENU_BAR_H = 28
 const DOCK_H = 70
-const MIN_W = 400
+const MIN_W = 300
 const MIN_H = 300
 const HANDLE = 6
 const SIDEBAR_DEFAULT = 232
 const SIDEBAR_MIN = 160
 const SIDEBAR_MAX = 400
+const MOBILE_BREAKPOINT = 640
 
 const CURSORS: Record<Dir, string> = {
   n: 'ns-resize',
@@ -1219,11 +1220,12 @@ export function ArcWindow({
     const vw = window.innerWidth
     const vh = window.innerHeight
     const availH = vh - MENU_BAR_H - DOCK_H
-    const margin = 8
-    const w = Math.min(1200, vw - margin * 2)
-    const h = Math.min(800, availH - margin * 2)
-    const x = Math.round((vw - w) / 2)
-    const y = MENU_BAR_H + margin + Math.round((availH - margin * 2 - h) / 2)
+    const isMobile = vw < MOBILE_BREAKPOINT
+    const margin = isMobile ? 0 : 8
+    const w = isMobile ? vw : Math.min(1200, vw - margin * 2)
+    const h = isMobile ? availH : Math.min(800, availH - margin * 2)
+    const x = isMobile ? 0 : Math.round((vw - w) / 2)
+    const y = MENU_BAR_H + (isMobile ? 0 : margin + Math.round((availH - margin * 2 - h) / 2))
     return { x, y, w, h }
   })
 
@@ -1378,7 +1380,7 @@ export function ArcWindow({
   const nextNodeId = useRef(1)
   const [activeTabId, setActiveTabId] = useState<number | null>(0)
   const pendingNewTab = useRef(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < MOBILE_BREAKPOINT)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [fullscreen, setFullscreen] = useState(false)
   const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)
