@@ -1,169 +1,194 @@
-import { usePhotosStore } from '../../../stores/photos-store'
+import { usePhotosStore, type SidebarSection } from '../../../stores/photos-store'
+import libraryGlyphSvg from '../../../../assets/sf-symbols/photo.on.rectangle--monochrome--medium.svg?raw'
+import collectionsGlyphSvg from '../../../../assets/sf-symbols/rectangle.stack--monochrome--medium.svg?raw'
+import favoritesGlyphSvg from '../../../../assets/sf-symbols/heart--monochrome--medium.svg?raw'
+import videosGlyphSvg from '../../../../assets/sf-symbols/video--monochrome--medium.svg?raw'
 
-interface SidebarItem {
-  id: string
+type NavItem = {
+  id: SidebarSection
   label: string
-  icon: string
+  iconSvg: string
 }
 
-const LIBRARY_ITEMS: SidebarItem[] = [
-  { id: 'library', label: 'Library', icon: 'photo' },
-  { id: 'favorites', label: 'Favorites', icon: 'heart' },
-  { id: 'recents', label: 'Recently Saved', icon: 'clock' },
+const TOP_ITEMS: NavItem[] = [
+  { id: 'library', label: 'Library', iconSvg: libraryGlyphSvg },
+  { id: 'collections', label: 'Collections', iconSvg: collectionsGlyphSvg },
 ]
 
-const MEDIA_ITEMS: SidebarItem[] = [
-  { id: 'selfies', label: 'Selfies', icon: 'person' },
-  { id: 'videos', label: 'Videos', icon: 'play' },
-  { id: 'screenshots', label: 'Screenshots', icon: 'screen' },
-  { id: 'recently-deleted', label: 'Recently Deleted', icon: 'trash' },
+const PINNED_ITEMS: NavItem[] = [
+  { id: 'favorites', label: 'Favorites', iconSvg: favoritesGlyphSvg },
+  { id: 'videos', label: 'Videos', iconSvg: videosGlyphSvg },
 ]
 
-function SidebarIcon({ type, active }: { type: string; active: boolean }) {
-  const color = active ? '#fff' : 'rgba(255,255,255,0.55)'
-  const size = 14
+function SectionHeader({ children }: { children: string }) {
+  return (
+    <div className="shrink-0">
+      <span
+        style={{
+          fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+          fontSize: 12,
+          fontWeight: 600,
+          lineHeight: 'normal',
+          letterSpacing: '-0.12px',
+          color: '#989798',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {children}
+      </span>
+    </div>
+  )
+}
 
-  switch (type) {
-    case 'photo':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="3" width="14" height="10" rx="2" stroke={color} strokeWidth="1.3" />
-          <circle cx="5.5" cy="7" r="1.5" stroke={color} strokeWidth="1" />
-          <path d="M1 11l3.5-3.5L7 10l3-4 5 5.5V11a2 2 0 01-2 2H3a2 2 0 01-2-2z" fill={color} opacity="0.3" />
-        </svg>
-      )
-    case 'heart':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <path d="M8 14s-5.5-3.5-5.5-7A3 3 0 018 4.5 3 3 0 0113.5 7C13.5 10.5 8 14 8 14z" stroke={color} strokeWidth="1.3" />
-        </svg>
-      )
-    case 'clock':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.3" />
-          <path d="M8 4.5V8l2.5 2" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      )
-    case 'person':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="5.5" r="3" stroke={color} strokeWidth="1.3" />
-          <path d="M2.5 14c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      )
-    case 'play':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <path d="M5 3l8 5-8 5V3z" stroke={color} strokeWidth="1.3" strokeLinejoin="round" />
-        </svg>
-      )
-    case 'screen':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <rect x="1.5" y="2" width="13" height="9.5" rx="1.5" stroke={color} strokeWidth="1.3" />
-          <path d="M5.5 14h5" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      )
-    case 'trash':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <path d="M3 4.5h10M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5M4.5 4.5L5 13a1 1 0 001 1h4a1 1 0 001-1l.5-8.5" stroke={color} strokeWidth="1.2" strokeLinecap="round" />
-        </svg>
-      )
-    case 'album':
-      return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-          <rect x="2" y="3" width="12" height="10" rx="1.5" stroke={color} strokeWidth="1.3" />
-          <rect x="4" y="1.5" width="8" height="2" rx="0.8" stroke={color} strokeWidth="0.8" opacity="0.4" />
-        </svg>
-      )
-    default:
-      return null
-  }
+function SidebarRow({
+  item,
+  isActive,
+  onSelect,
+}: {
+  item: NavItem
+  isActive: boolean
+  onSelect: () => void
+}) {
+  return (
+    <div
+      className="relative flex w-full shrink-0 cursor-default items-center"
+      style={{
+        padding: '4px 12px',
+        gap: 8,
+        borderRadius: 6,
+        color: '#ffffff',
+        background: isActive
+          ? 'linear-gradient(180deg, rgba(10,132,255,0.95) 0%, rgba(10,132,255,0.82) 100%)'
+          : undefined,
+        boxShadow: isActive
+          ? 'inset 0 0.5px 0 rgba(255,255,255,0.35), 0 1px 3px rgba(10,132,255,0.28)'
+          : undefined,
+        transition:
+          'background 140ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 140ms cubic-bezier(0.32, 0.72, 0, 1)',
+      }}
+      onClick={onSelect}
+      onMouseEnter={(e) => {
+        if (!isActive) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) (e.currentTarget as HTMLElement).style.background = ''
+        else {
+          (e.currentTarget as HTMLElement).style.background =
+            'linear-gradient(180deg, rgba(10,132,255,0.95) 0%, rgba(10,132,255,0.82) 100%)'
+        }
+      }}
+    >
+      <div
+        className="flex shrink-0 items-center justify-center"
+        style={{
+          width: 16,
+          height: 16,
+          transform: 'translateY(0.5px)',
+        }}
+      >
+        <span
+          className="inline-flex shrink-0 [&>svg]:block [&>svg]:h-4 [&>svg]:w-4"
+          style={{
+            color: isActive ? '#ffffff' : 'rgba(255,255,255,0.88)',
+          }}
+          dangerouslySetInnerHTML={{ __html: item.iconSvg }}
+        />
+      </div>
+      <span
+        style={{
+          fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+          fontSize: 12,
+          fontWeight: 400,
+          letterSpacing: '-0.08px',
+          whiteSpace: 'nowrap',
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {item.label}
+      </span>
+    </div>
+  )
 }
 
 export function PhotosSidebar({
   width,
   onResizeStart,
+  topContentInset = 0,
 }: {
   width: number
   onResizeStart: (e: React.PointerEvent) => void
+  /** Extra top padding inside the sidebar to clear the toolbar / traffic lights area. */
+  topContentInset?: number
 }) {
   const selectedSection = usePhotosStore((s) => s.selectedSection)
   const selectSection = usePhotosStore((s) => s.selectSection)
-  const albums = usePhotosStore((s) => s.albums)
-
-  const renderItem = (item: SidebarItem) => {
-    const isActive = item.id === selectedSection
-    return (
-      <div
-        key={item.id}
-        className="flex items-center gap-2 rounded-md px-2 py-[3px]"
-        style={{
-          cursor: 'default',
-          background: isActive ? 'rgba(255,255,255,0.1)' : undefined,
-          transition: 'background 0.1s',
-        }}
-        onClick={() => selectSection(item.id)}
-        onMouseEnter={(e) => {
-          if (!isActive) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) (e.currentTarget as HTMLElement).style.background = ''
-        }}
-      >
-        <SidebarIcon type={item.icon} active={isActive} />
-        <span
-          className="text-[12px]"
-          style={{
-            color: isActive ? '#fff' : 'rgba(255,255,255,0.75)',
-            fontWeight: isActive ? 600 : 400,
-          }}
-        >
-          {item.label}
-        </span>
-      </div>
-    )
-  }
 
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col"
-      style={{ width, background: '#1A1A1A', borderRight: '0.5px solid rgba(255,255,255,0.08)' }}
+      className="relative flex h-full min-h-0 w-full shrink-0 flex-col"
+      style={{
+        width,
+        borderRadius: 18,
+        boxShadow:
+          '0 6px 18px -10px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.25)',
+      }}
     >
-      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2">
-        {/* Library section */}
-        {LIBRARY_ITEMS.map(renderItem)}
-
-        {/* Media Types header */}
-        <div className="mt-4 mb-1 px-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Media Types
-          </span>
-        </div>
-        {MEDIA_ITEMS.map(renderItem)}
-
-        {/* Albums header */}
-        <div className="mt-4 mb-1 px-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Albums
-          </span>
-        </div>
-        {renderItem({ id: 'all-albums', label: 'All Albums', icon: 'album' })}
-        {albums.map((a) =>
-          renderItem({ id: a.id, label: a.name, icon: 'album' }),
-        )}
-      </div>
-
-      {/* Resize handle */}
       <div
-        className="group absolute right-0 top-0 h-full w-1.5 cursor-col-resize"
-        style={{ touchAction: 'none' }}
-        onPointerDown={onResizeStart}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background: 'transparent',
+          backdropFilter: 'blur(34px) saturate(200%)',
+          WebkitBackdropFilter: 'blur(34px) saturate(200%)',
+          borderRadius: 18,
+          boxShadow:
+            '0 0 0 0.5px rgba(255,255,255,0.08), inset 0 0.5px 0 rgba(255,255,255,0.22), inset 0 -0.5px 0 rgba(255,255,255,0.05), inset 0 0 0 0.5px rgba(255,255,255,0.10)',
+          filter: 'url(#photos-lg-sidebar)',
+        }}
+      />
+      <div
+        className="relative z-[1] flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden"
+        style={{
+          paddingLeft: 18,
+          paddingRight: 18,
+          paddingTop: 8 + topContentInset,
+          paddingBottom: 18,
+          borderRadius: 18,
+        }}
       >
-        <div className="absolute left-1/2 top-2 bottom-2 w-[2px] -translate-x-1/2 rounded-full bg-white/0 transition-colors duration-150 group-hover:bg-white/15" />
+        <div className="flex w-full flex-col" style={{ width: '100%' }}>
+          {TOP_ITEMS.map((item) => (
+            <SidebarRow
+              key={item.id}
+              item={item}
+              isActive={selectedSection === item.id}
+              onSelect={() => selectSection(item.id)}
+            />
+          ))}
+        </div>
+
+        <div className="flex w-full flex-col" style={{ marginTop: 20, width: '100%' }}>
+          <SectionHeader>Pinned</SectionHeader>
+          <div className="flex flex-col">
+            {PINNED_ITEMS.map((item) => (
+              <SidebarRow
+                key={item.id}
+                item={item}
+                isActive={selectedSection === item.id}
+                onSelect={() => selectSection(item.id)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
+
+      <div
+        className="absolute top-0 z-[2] h-full w-2 cursor-col-resize"
+        style={{ right: -4, touchAction: 'none' }}
+        onPointerDown={onResizeStart}
+      />
     </div>
   )
 }

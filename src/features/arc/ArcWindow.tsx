@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { TrafficLights } from '../../components/TrafficLights'
 import { useAppStore } from '../../stores/app-store'
 import { useMinimizeAnimation } from '../../hooks/useMinimizeAnimation'
+import { useFitWindowToViewport } from '../../hooks/useFitWindowToViewport'
+import { WINDOW_DROP_SHADOW } from '../../styles/window-shadow'
 
 /* ─── helpers ─── */
 
@@ -939,12 +941,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
       )}
       {/* Initial full-screen loader only if nothing to show yet */}
       {status === 'loading' && !prevBlobUrl && !blobUrl && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1a2e' }}>
-          <div className="flex flex-col items-center gap-3">
-            <div className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
-            <span className="text-[12px] text-white/30">Loading...</span>
-          </div>
-        </div>
+        <div className="absolute inset-0" style={{ background: '#ffffff' }} />
       )}
     </>
   )
@@ -1232,27 +1229,6 @@ export function ArcWindow({
   const rectRef = useRef(rect)
   rectRef.current = rect
 
-  /* ── keep window within viewport on browser resize ── */
-  useEffect(() => {
-    const onResize = () => {
-      setRect((prev) => {
-        const vw = window.innerWidth
-        const vh = window.innerHeight
-        const maxW = vw - 20
-        const maxH = vh - MENU_BAR_H - DOCK_H - 20
-        const w = Math.min(prev.w, maxW)
-        const h = Math.min(prev.h, maxH)
-        let x = Math.min(prev.x, vw - w)
-        let y = Math.min(prev.y, vh - DOCK_H - h)
-        if (x < 0) x = 0
-        if (y < MENU_BAR_H) y = MENU_BAR_H
-        return { x, y, w, h }
-      })
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
   /* ── navigation state (works for both webview & iframe) ── */
   const INITIAL_URL = 'https://www.youtube.com/watch?v=8IcYpOl4Sdk'
   const [history, setHistory] = useState<string[]>([INITIAL_URL])
@@ -1385,6 +1361,21 @@ export function ArcWindow({
   const [fullscreen, setFullscreen] = useState(false)
   const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)
   const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), [])
+
+  /* Proportionally fit the window to the browser viewport: as the browser
+     grows/shrinks, the window scales by the same ratio so its share of the
+     viewport stays roughly constant (instead of just clamping downward). */
+  useFitWindowToViewport(
+    setRect,
+    {
+      menuBarH: MENU_BAR_H,
+      dockH: DOCK_H,
+      minW: MIN_W,
+      minH: MIN_H,
+      isFullscreen: () => fullscreen,
+    },
+    setPreFullscreenRect,
+  )
 
   const handleClose = useCallback(() => {
     closeApp('arc')
@@ -1537,8 +1528,9 @@ export function ArcWindow({
           background: 'rgba(4, 6, 24, 0.5)',
           backdropFilter: 'blur(32.5px)',
           WebkitBackdropFilter: 'blur(32.5px)',
-          boxShadow:
-            '0 25px 50px -12px rgba(0, 0, 0, 0.25), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12)',
+          boxShadow: fullscreen
+            ? 'inset 0 0 0 0.5px rgba(255, 255, 255, 0.12)'
+            : `${WINDOW_DROP_SHADOW}, inset 0 0 0 0.5px rgba(255, 255, 255, 0.12)`,
         }}
       >
         <div

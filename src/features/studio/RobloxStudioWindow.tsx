@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../stores/app-store'
 import { useMinimizeAnimation } from '../../hooks/useMinimizeAnimation'
 import { useFitWindowToViewport } from '../../hooks/useFitWindowToViewport'
-import { NotesSidebar } from './components/NotesSidebar'
-import { NotesToolbar } from './components/NotesToolbar'
-import { NotesEditor } from './components/NotesEditor'
+import { TrafficLights } from '../../components/TrafficLights'
+import StudioApp from './App'
+import './styles/global.css'
 import { WINDOW_SHADOW } from '../../styles/window-shadow'
 
 /* ─── resize types ─── */
@@ -20,13 +20,9 @@ interface Rect {
 
 const MENU_BAR_H = 28
 const DOCK_H = 70
-const MIN_W = 300
-const MIN_H = 400
+const MIN_W = 900
+const MIN_H = 560
 const HANDLE = 6
-const SIDEBAR_DEFAULT = 260
-const SIDEBAR_MIN = 180
-const SIDEBAR_MAX = 400
-const MOBILE_BREAKPOINT = 640
 
 const CURSORS: Record<Dir, string> = {
   n: 'ns-resize',
@@ -106,7 +102,7 @@ const ALL_DIRS: Dir[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 
 /* ─── window ─── */
 
-export function NotesWindow({
+export function RobloxStudioWindow({
   onFocus,
   zIndex,
 }: {
@@ -116,24 +112,21 @@ export function NotesWindow({
   const [rect, setRect] = useState<Rect>(() => {
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const isMobile = vw < MOBILE_BREAKPOINT
-    const w = isMobile ? vw : Math.min(900, vw - 40)
-    const h = isMobile
-      ? vh - MENU_BAR_H - DOCK_H
-      : Math.min(620, vh - MENU_BAR_H - DOCK_H - 40)
-    const x = isMobile ? 0 : Math.round((vw - w) / 2)
-    const y = MENU_BAR_H + (isMobile ? 0 : Math.round((vh - MENU_BAR_H - DOCK_H - h) / 2))
+    const w = Math.min(1280, vw - 40)
+    const h = Math.min(820, vh - MENU_BAR_H - DOCK_H - 40)
+    const x = Math.round((vw - w) / 2)
+    const y = MENU_BAR_H + Math.round((vh - MENU_BAR_H - DOCK_H - h) / 2)
     return { x, y, w, h }
   })
 
   const rectRef = useRef(rect)
-  rectRef.current = rect
+  useEffect(() => {
+    rectRef.current = rect
+  })
 
   const closeApp = useAppStore((s) => s.closeApp)
   const setFullscreenApp = useAppStore((s) => s.setFullscreenApp)
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < MOBILE_BREAKPOINT)
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [fullscreen, setFullscreen] = useState(false)
   const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)
 
@@ -152,17 +145,15 @@ export function NotesWindow({
     setPreFullscreenRect,
   )
 
-  const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), [])
-
   const windowRef = useRef<HTMLDivElement>(null)
 
   const handleClose = useCallback(() => {
-    closeApp('notes')
+    closeApp('roblox-studio')
     setFullscreenApp(null)
   }, [closeApp, setFullscreenApp])
 
   const { outerRef, handleMinimize } = useMinimizeAnimation(
-    'notes',
+    'roblox-studio',
     rectRef,
     windowRef,
     () => {
@@ -182,14 +173,11 @@ export function NotesWindow({
       setPreFullscreenRect(rect)
       setRect({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight })
       setFullscreen(true)
-      setFullscreenApp('notes')
+      setFullscreenApp('roblox-studio')
     }
   }, [fullscreen, rect, preFullscreenRect, setFullscreenApp])
 
   /* ── drag & resize ── */
-
-  const sidebarWidthRef = useRef(sidebarWidth)
-  sidebarWidthRef.current = sidebarWidth
 
   const dragRef = useRef<{
     startX: number
@@ -198,36 +186,7 @@ export function NotesWindow({
     mode: Dir | 'move'
   } | null>(null)
 
-  const sidebarDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
-
   const [dragging, setDragging] = useState(false)
-  const [sidebarDragging, setSidebarDragging] = useState(false)
-
-  const startSidebarResize = useCallback((e: React.PointerEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    sidebarDragRef.current = { startX: e.clientX, startWidth: sidebarWidthRef.current }
-    setSidebarDragging(true)
-  }, [])
-
-  useEffect(() => {
-    if (!sidebarDragging) return
-    const onMove = (e: PointerEvent) => {
-      if (!sidebarDragRef.current) return
-      const dx = e.clientX - sidebarDragRef.current.startX
-      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sidebarDragRef.current.startWidth + dx)))
-    }
-    const onUp = () => {
-      sidebarDragRef.current = null
-      setSidebarDragging(false)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-  }, [sidebarDragging])
 
   const startDrag = useCallback(
     (mode: Dir | 'move', e: React.PointerEvent) => {
@@ -280,7 +239,7 @@ export function NotesWindow({
         width: rect.w,
         height: rect.h,
         zIndex,
-        userSelect: dragging || sidebarDragging ? 'none' : undefined,
+        userSelect: dragging ? 'none' : undefined,
         transition:
           fullscreen || preFullscreenRect
             ? 'left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease'
@@ -288,51 +247,65 @@ export function NotesWindow({
       }}
       onPointerDown={onFocus}
     >
-      {/* Window chrome */}
       <div
         ref={windowRef}
         className="relative flex h-full w-full flex-col overflow-hidden"
         style={{
-          borderRadius: fullscreen ? 0 : 24,
-          background: '#1E1E1E',
+          borderRadius: fullscreen ? 0 : 12,
+          background: '#121215',
           boxShadow: fullscreen ? 'none' : WINDOW_SHADOW,
         }}
       >
-        {/* Unified top bar */}
-        <NotesToolbar
-          onToggleSidebar={toggleSidebar}
-          onDragStart={(e) => startDrag('move', e)}
-          onClose={handleClose}
-          onMinimize={handleMinimize}
-          onFullscreen={handleFullscreen}
-          windowWidth={rect.w}
-        />
-
-        {/* Body: sidebar + editor */}
-        <div className="flex min-h-0 flex-1">
-          {/* Sidebar */}
-          <div
-            className="shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out"
-            style={{ marginLeft: sidebarCollapsed ? -sidebarWidth : 0 }}
-          >
-            <NotesSidebar
-              width={sidebarWidth}
-              onResizeStart={startSidebarResize}
+        {/* Slim title bar with traffic lights — draggable. */}
+        <div
+          className="flex shrink-0 items-center gap-3 px-3"
+          style={{
+            height: 30,
+            background: '#191A1F',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            cursor: 'default',
+          }}
+          onPointerDown={(e) => startDrag('move', e)}
+        >
+          <div onPointerDown={(e) => e.stopPropagation()}>
+            <TrafficLights
+              onClose={handleClose}
+              onMinimize={handleMinimize}
+              onFullscreen={handleFullscreen}
             />
           </div>
-
-          {/* Editor area */}
-          <div className="flex min-w-0 flex-1 flex-col" style={{ background: '#1E1E1E' }}>
-            <NotesEditor />
+          <div
+            className="flex-1 text-center"
+            style={{
+              fontFamily: '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'rgba(255,255,255,0.7)',
+              letterSpacing: '-0.01em',
+              userSelect: 'none',
+            }}
+          >
+            Roblox Studio — studio-shell
           </div>
+          {/* Right-side spacer to balance traffic lights for centered title. */}
+          <div style={{ width: 52 }} />
+        </div>
+
+        {/* Studio app body */}
+        <div
+          className="studio-root relative flex-1"
+          style={{ minHeight: 0 }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <StudioApp />
         </div>
 
         {/* Inner border overlay */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            borderRadius: fullscreen ? 0 : 24,
-            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.35)',
+            borderRadius: fullscreen ? 0 : 12,
+            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.10)',
           }}
         />
       </div>

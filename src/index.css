@@ -93,6 +93,20 @@ body {
   font-weight: 600;
 }
 
+.notes-editor .section-header {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 28px 0 0;
+}
+
+.notes-editor .section-header:first-child {
+  margin-top: 0;
+}
+
+.notes-editor h1 + .section-header {
+  margin-top: 16px;
+}
+
 .notes-editor a {
   color: #FFC149;
   text-decoration: underline;
@@ -138,6 +152,72 @@ body {
 
 .arc-sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Photos grid overlay scrollbar ───
+ *
+ * The Photos toolbar floats over the grid (photos scroll *behind* it). Without
+ * insetting the scrollbar, its track visually runs underneath the toolbar and
+ * reads as "touching" the chrome. We push the visible scrollbar region down
+ * by `--photos-scrollbar-inset-top` (driven from `topInset` = TOOLBAR_H in
+ * the React layer) so the scrollbar is confined to the photo area below the
+ * floating toolbar, while photos themselves still scroll continuously behind
+ * the toolbar's glass.
+ *
+ * Non-obvious Chromium detail: `margin-top` on `::-webkit-scrollbar-track`
+ * is what actually shortens the visible track region. Chromium clamps the
+ * thumb's `top` to that visible region, so the same margin-top is also set
+ * on `::-webkit-scrollbar-thumb` so the resting thumb stays aligned with
+ * the shortened track. `margin-bottom` is exposed via
+ * `--photos-scrollbar-inset-bottom` for symmetry / future use (footer count
+ * strip etc.); it defaults to 0.
+ *
+ * "Floating capsule" thumb (inset from the gutter walls) is built with
+ * `border: 3px solid transparent` + `background-clip: padding-box` —
+ * the border is the transparent inset, the padding-box clip is what makes
+ * the actual fill stop inside it. Standard macOS overlay-scrollbar idiom.
+ */
+.photos-grid-scroll {
+  /* Symmetric horizontal gutters: the scrollbar lives in a 12 px gutter on
+   * the right, and an identical empty gutter is reserved on the left, so
+   * the photo grid is visually centered regardless of whether the
+   * scrollbar is currently showing. Replaces the prior padding-left/right
+   * approach in PhotosGrid.tsx, which made the right edge wider than the
+   * left whenever the scrollbar materialized. */
+  scrollbar-gutter: stable both-edges;
+}
+
+.photos-grid-scroll::-webkit-scrollbar {
+  width: 12px;
+  background: transparent;
+}
+
+.photos-grid-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin-top: var(--photos-scrollbar-inset-top, 0);
+  margin-bottom: var(--photos-scrollbar-inset-bottom, 0);
+}
+
+.photos-grid-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  margin-top: var(--photos-scrollbar-inset-top, 0);
+  margin-bottom: var(--photos-scrollbar-inset-bottom, 0);
+}
+
+.photos-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.30);
+  background-clip: padding-box;
+}
+
+.photos-grid-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
+.photos-grid-scroll::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .notes-editor .checklist-item input[type="checkbox"]:checked {
