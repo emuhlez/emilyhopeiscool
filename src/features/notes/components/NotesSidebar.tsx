@@ -48,10 +48,21 @@ export function NotesSidebar({
           const isHovered = note.id === hoveredNoteId
           const preview = stripHtml(note.body).replace(note.title, '').trim().slice(0, 80)
 
+          const showDivider =
+            i > 0 && note.id !== selectedNoteId && sorted[i - 1].id !== selectedNoteId
+
           return (
             <div key={note.id}>
-              {i > 0 && note.id !== selectedNoteId && sorted[i - 1].id !== selectedNoteId && (
-                <div className="mx-2.5 my-1" style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
+              {/* Always reserve space for the divider so selecting a note doesn't
+                  shift the list. Only toggle its color when it should be hidden. */}
+              {i > 0 && (
+                <div
+                  className="mx-2.5 my-1"
+                  style={{
+                    height: 1,
+                    background: showDivider ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  }}
+                />
               )}
               <div
                 className="flex flex-col rounded-lg px-2.5 py-2"

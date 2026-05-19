@@ -13,7 +13,7 @@ export function DockIcon({
   onClick?: () => void
 }) {
   const storeActive = useAppStore((s) => (appId ? s.openApps.has(appId) : false))
-  const storeToggle = useAppStore((s) => s.toggleApp)
+  const storeOpenApp = useAppStore((s) => s.openApp)
 
   const [internalActive, setInternalActive] = useState(false)
   const [bouncing, setBouncing] = useState(false)
@@ -27,12 +27,11 @@ export function DockIcon({
       return
     }
 
+    // If the app is already open (or minimized), just bring its window to the
+    // front. Closing is reserved for the window's traffic-light close button —
+    // matches macOS dock behavior. openApp() handles focus / unminimize.
     if (active) {
-      if (appId) {
-        storeToggle(appId)
-      } else {
-        setInternalActive(false)
-      }
+      if (appId) storeOpenApp(appId)
       return
     }
 
@@ -48,7 +47,7 @@ export function DockIcon({
     setBouncing(false)
     if (pendingOpenRef.current && appId) {
       pendingOpenRef.current = false
-      storeToggle(appId)
+      storeOpenApp(appId)
     }
   }
 

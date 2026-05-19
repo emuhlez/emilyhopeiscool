@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../stores/app-store'
 import { useMinimizeAnimation } from '../../hooks/useMinimizeAnimation'
+import { useFitWindowToViewport } from '../../hooks/useFitWindowToViewport'
 import { PhotosSidebar } from './components/PhotosSidebar'
+import {
+  COLLAPSED_HEADER_ZONE_WIDTH,
+  PhotosSidebarHeader,
+} from './components/PhotosSidebarHeader'
 import { PhotosToolbar } from './components/PhotosToolbar'
 import { PhotosGrid } from './components/PhotosGrid'
+import { LiquidGlassDefs } from './components/LiquidGlassDefs'
+import { WINDOW_SHADOW } from '../../styles/window-shadow'
+
+const TOOLBAR_H = 64
 
 /* ─── resize types ─── */
 
@@ -21,9 +30,14 @@ const DOCK_H = 70
 const MIN_W = 560
 const MIN_H = 420
 const HANDLE = 6
-const SIDEBAR_DEFAULT = 200
+const SIDEBAR_DEFAULT = 205
 const SIDEBAR_MIN = 160
-const SIDEBAR_MAX = 320
+const SIDEBAR_MAX = 360
+
+const SIDEBAR_FLOAT_INSET_LEFT = 10
+const SIDEBAR_FLOAT_INSET_TOP = 10
+const SIDEBAR_FLOAT_INSET_BOTTOM = 10
+const SIDEBAR_FLOAT_GAP = 6
 
 const CURSORS: Record<Dir, string> = {
   n: 'ns-resize',
@@ -125,26 +139,6 @@ export function PhotosWindow({
     rectRef.current = rect
   })
 
-  useEffect(() => {
-    const onResize = () => {
-      setRect((prev) => {
-        const vw = window.innerWidth
-        const vh = window.innerHeight
-        const maxW = vw - 20
-        const maxH = vh - MENU_BAR_H - DOCK_H - 20
-        const w = Math.min(prev.w, maxW)
-        const h = Math.min(prev.h, maxH)
-        let x = Math.min(prev.x, vw - w)
-        let y = Math.min(prev.y, vh - DOCK_H - h)
-        if (x < 0) x = 0
-        if (y < MENU_BAR_H) y = MENU_BAR_H
-        return { x, y, w, h }
-      })
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
   const closeApp = useAppStore((s) => s.closeApp)
   const setFullscreenApp = useAppStore((s) => s.setFullscreenApp)
 
@@ -152,6 +146,23 @@ export function PhotosWindow({
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [fullscreen, setFullscreen] = useState(false)
   const [preFullscreenRect, setPreFullscreenRect] = useState<Rect | null>(null)
+
+  /* Proportionally fit the window to the browser viewport: as the browser
+     grows/shrinks, the window scales by the same ratio so its share of the
+     viewport stays roughly constant (instead of just clamping downward).
+     Skip scaling while fullscreen — the hook snaps the rect to the full
+     viewport instead so chrome stays glued to the screen edges. */
+  useFitWindowToViewport(
+    setRect,
+    {
+      menuBarH: MENU_BAR_H,
+      dockH: DOCK_H,
+      minW: MIN_W,
+      minH: MIN_H,
+      isFullscreen: () => fullscreen,
+    },
+    setPreFullscreenRect,
+  )
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), [])
 
@@ -273,6 +284,8 @@ export function PhotosWindow({
     }
   }, [dragging])
 
+  const effectiveSidebarWidth = sidebarCollapsed ? 0 : sidebarWidth
+
   return (
     <div
       ref={outerRef}
@@ -291,55 +304,133 @@ export function PhotosWindow({
       }}
       onPointerDown={onFocus}
     >
-      {/* Window chrome */}
       <div
         ref={windowRef}
-        className="relative flex h-full w-full flex-col overflow-hidden"
+        className="relative flex h-full w-full min-h-0 flex-col overflow-hidden"
         style={{
           borderRadius: fullscreen ? 0 : 24,
-          background: '#1E1E1E',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          /* Option A: subtle translucency so sidebar backdrop-filter samples real content behind the window (sim desktop wallpaper). */
+          background: fullscreen ? '#1E1E1E' : 'rgba(30, 30, 30, 0.92)',
+          boxShadow: fullscreen ? 'none' : WINDOW_SHADOW,
         }}
       >
-        {/* Toolbar */}
-        <PhotosToolbar
-          onToggleSidebar={toggleSidebar}
+        <LiquidGlassDefs />
+
+        {/* Photo grid spans the full window width and full height; the floating sidebar
+            sits on top of it on the left, and the toolbar's frosted-glass zone floats
+            over the top so scrolling photos pass *behind* the toolbar rather than being
+            clipped by it. The grid's first row is inset by TOOLBAR_H via topInset. */}
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          style={{
+            paddingLeft:
+              effectiveSidebarWidth > 0
+                ? SIDEBAR_FLOAT_INSET_LEFT + effectiveSidebarWidth + SIDEBAR_FLOAT_GAP
+                : 0,
+            transition: 'padding-left 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+            background: 'transparent',
+          }}
+        >
+          <PhotosGrid topInset={TOOLBAR_H} />
+        </div>
+
+        {effectiveSidebarWidth > 0 && (
+          <div
+            className="absolute"
+            style={{
+              left: SIDEBAR_FLOAT_INSET_LEFT,
+              top: SIDEBAR_FLOAT_INSET_TOP,
+              bottom: SIDEBAR_FLOAT_INSET_BOTTOM,
+              width: effectiveSidebarWidth,
+              transition: 'width 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+              // z-16 sits one notch above the frost top bar (z-15) so that
+              // during the collapse→expand slide — where the sidebar mounts
+              // instantly at full width but the frost's `left` animates over
+              // 280 ms toward the sidebar's right edge — the sidebar's top
+              // is not transiently tinted by the frost's backdrop blur. In
+              // the resting expanded state the two never overlap (frost
+              // starts at sidebar.right + 6 px), so this only matters
+              // during the slide.
+              zIndex: 16,
+            }}
+          >
+            <PhotosSidebar
+              width={effectiveSidebarWidth}
+              topContentInset={TOOLBAR_H - SIDEBAR_FLOAT_INSET_TOP}
+              onResizeStart={startSidebarResize}
+            />
+          </div>
+        )}
+
+        {/* Frosted top backing strip. Anchors the toolbar's chip clusters on
+            a continuous translucent band so they don't read as floating on
+            photo content. Left edge animates in sync with the sidebar slide
+            (280 ms cubic-bezier 0.32, 0.72, 0, 1) — full-width when
+            collapsed, starts at the sidebar's right edge when expanded.
+            All three free edges (bottom, left, right) dissolve via long
+            non-linear mask-image gradients so the band feels seamless
+            with no perceptible hairline. The bottom fade uses a 2-stop
+            curve (gentle 1.0 → 0.7 over 20 px, then accelerated 0.7 → 0
+            over 12 px) so the eye-sensitive midtones change slowly while
+            the high-contrast endpoints change fast — same trick as macOS
+            Tahoe's toolbar bottom edge. Left + right edges mirror the
+            curve so the band tapers symmetrically. */}
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            top: 0,
+            left:
+              effectiveSidebarWidth > 0
+                ? SIDEBAR_FLOAT_INSET_LEFT + effectiveSidebarWidth + SIDEBAR_FLOAT_GAP
+                : 0,
+            right: 0,
+            height: TOOLBAR_H,
+            zIndex: 15,
+            background: 'rgba(28, 28, 30, 0.50)',
+            backdropFilter: 'blur(30px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(30px) saturate(160%)',
+            boxShadow: 'inset 0 0.5px 0 rgba(255, 255, 255, 0.10)',
+            maskImage:
+              'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 32px), rgba(0,0,0,0.7) calc(100% - 12px), rgba(0,0,0,0) 100%), linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 12px, rgba(0,0,0,1) 32px, rgba(0,0,0,1) 100%), linear-gradient(to left, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 12px, rgba(0,0,0,1) 32px, rgba(0,0,0,1) 100%)',
+            maskComposite: 'intersect',
+            WebkitMaskImage:
+              'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 32px), rgba(0,0,0,0.7) calc(100% - 12px), rgba(0,0,0,0) 100%), linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 12px, rgba(0,0,0,1) 32px, rgba(0,0,0,1) 100%), linear-gradient(to left, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 12px, rgba(0,0,0,1) 32px, rgba(0,0,0,1) 100%)',
+            WebkitMaskComposite: 'source-in',
+            transition: 'left 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+          }}
+        />
+
+        <PhotosSidebarHeader
           onDragStart={(e) => startDrag('move', e)}
           onClose={handleClose}
           onMinimize={handleMinimize}
           onFullscreen={handleFullscreen}
+          onToggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+          sidebarWidth={effectiveSidebarWidth}
         />
 
-        {/* Body: sidebar + grid */}
-        <div className="flex min-h-0 flex-1">
-          {/* Sidebar */}
-          <div
-            className="shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out"
-            style={{ marginLeft: sidebarCollapsed ? -sidebarWidth : 0 }}
-          >
-            <PhotosSidebar
-              width={sidebarWidth}
-              onResizeStart={startSidebarResize}
-            />
-          </div>
+        <PhotosToolbar
+          height={TOOLBAR_H}
+          onDragStart={(e) => startDrag('move', e)}
+          contentLeftPx={
+            effectiveSidebarWidth > 0
+              ? SIDEBAR_FLOAT_INSET_LEFT + effectiveSidebarWidth + SIDEBAR_FLOAT_GAP
+              : COLLAPSED_HEADER_ZONE_WIDTH
+          }
+          windowWidth={rect.w}
+        />
 
-          {/* Grid area */}
-          <div className="flex min-w-0 flex-1 flex-col" style={{ background: '#1E1E1E' }}>
-            <PhotosGrid />
-          </div>
-        </div>
-
-        {/* Inner border overlay */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             borderRadius: fullscreen ? 0 : 24,
-            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.35)',
+            boxShadow:
+              'inset 0 0.5px 0 0 rgba(255, 255, 255, 0.14), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06)',
           }}
         />
       </div>
 
-      {/* Resize handles */}
       {!fullscreen &&
         ALL_DIRS.map((dir) => (
           <div

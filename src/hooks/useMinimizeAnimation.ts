@@ -149,11 +149,24 @@ export function useMinimizeAnimation(
       requestAnimationFrame(tick)
     }
 
-    // Capture a small dock thumbnail, then animate
+    // Capture a small dock thumbnail, then animate. Skip iframes (cross-origin
+    // ones throw SecurityError and abort the whole capture — Arc's web content
+    // is the main culprit) and anything explicitly opted out via
+    // data-skip-snapshot. The window chrome still captures, so the dock thumb
+    // reads as the actual window instead of falling back to the app icon.
     const inner = snapshotRef.current
     if (inner) {
       import('html-to-image').then(({ toPng }) => {
-        toPng(inner as HTMLElement, { pixelRatio: 0.5, backgroundColor: '#040618' })
+        toPng(inner as HTMLElement, {
+          pixelRatio: 0.5,
+          backgroundColor: '#040618',
+          filter: (node) => {
+            if (!(node instanceof Element)) return true
+            if (node.tagName === 'IFRAME') return false
+            if (node.hasAttribute('data-skip-snapshot')) return false
+            return true
+          },
+        })
           .then(url => { thumbRef.current = url; runAnimation() })
           .catch(() => runAnimation())
       }).catch(() => runAnimation())

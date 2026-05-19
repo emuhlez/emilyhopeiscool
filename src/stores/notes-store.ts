@@ -32,6 +32,7 @@ interface NotesState {
 }
 
 const STORAGE_KEY = 'notes-app-data'
+const SEEDED_TITLES_KEY = 'notes-app-seeded-titles'
 const DEBOUNCE_MS = 400
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -53,6 +54,22 @@ function loadFromStorage(): { folders: Folder[]; notes: NoteItem[] } | null {
     if (Array.isArray(data.folders) && Array.isArray(data.notes)) return data
   } catch { /* corrupted – ignore */ }
   return null
+}
+
+function loadSeededTitles(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SEEDED_TITLES_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    if (Array.isArray(arr)) return new Set(arr)
+  } catch { /* ignore */ }
+  return new Set()
+}
+
+function saveSeededTitles(titles: Set<string>) {
+  try {
+    localStorage.setItem(SEEDED_TITLES_KEY, JSON.stringify([...titles]))
+  } catch { /* ignore */ }
 }
 
 const DEFAULT_FOLDERS: Folder[] = [
@@ -79,8 +96,16 @@ const DEFAULT_NOTES: NoteItem[] = [
   {
     id: makeId(),
     folderId: 'personal',
+    title: 'my history',
+    body: `<h1>my history</h1><p class="section-header">My education</p><p>Fight on. I graduated with my BA in Communication at Annenberg and my MS in Production Innovation at Jimmy Iovine and Dr Dre\u2019s Academy.</p><p class="section-header">My values</p><p>Fail fast and often.<br>Practice makes permanent.</p><p class="section-header">My work</p><p>Roblox<br>2022\u2013Present</p><p>I design for Roblox\u2019s Assistant and asset creation/management tools. I previously led design for Asset Privacy, Creator Store, and Music.</p><p>In my time at Roblox, I have been a champion of vibe coding and empowering designers to strengthen their storytelling capabilities through delightful, interactive prototypes.</p><p>I love being in the weeds of building and creating something awesome for creators.</p>`,
+    createdAt: now - 86400000 * 4,
+    updatedAt: now - 86400000 * 4,
+  },
+  {
+    id: makeId(),
+    folderId: 'personal',
     title: 'about this site',
-    body: `<h1>about this site</h1><p>hi! i\u2019m emily and i built this site using Claude Code</p><p>some functionality (web capabilities and genie-animation) credits: ryo lu and harshal shah</p><p>this is a 1 to 1 reflection of my laptop and i\u2019m a believer that our devices are the most personal, unique things about us. take a peek into my brain and things i\u2019ve built with collaborators.</p><p>so glad that you\u2019re here. poke around :)</p>`,
+    body: `<h1>about this site</h1><p>Hi! I\u2019m Emily and I built this using Cursor and Claude Code.</p><p></p><p>This is a 1 to 1 reflection of my laptop. I live by director Bong Joon Ho\u2019s favorite quote by Martin Scorsese, \u201CThe most personal is the most creative.\u201D I am a believer that our devices are the most personal, unique things about us and I wanted to share something personal about me with you. Take a peek into my brain and things I\u2019ve built with collaborators.</p><p></p><p>I am so glad that you\u2019re here. Poke around :)</p>`,
     createdAt: now - 86400000 * 2,
     updatedAt: now - 86400000 * 2,
   },
@@ -88,8 +113,30 @@ const DEFAULT_NOTES: NoteItem[] = [
 
 function getInitialData() {
   const stored = loadFromStorage()
-  if (stored) return stored
-  return { folders: DEFAULT_FOLDERS, notes: DEFAULT_NOTES }
+  if (!stored) {
+    saveSeededTitles(new Set(DEFAULT_NOTES.map((n) => n.title)))
+    return { folders: DEFAULT_FOLDERS, notes: DEFAULT_NOTES }
+  }
+
+  // Returning user: backfill any newly-seeded notes (by title) they've never seen.
+  // Won't re-add notes the user has explicitly deleted from a previous seed.
+  const seenSeededTitles = loadSeededTitles()
+  const existingTitles = new Set(stored.notes.map((n) => n.title))
+  const toAdd = DEFAULT_NOTES.filter(
+    (n) => !seenSeededTitles.has(n.title) && !existingTitles.has(n.title),
+  )
+
+  if (toAdd.length > 0) {
+    const merged = [...stored.notes, ...toAdd]
+    const allSeenTitles = new Set([...seenSeededTitles, ...DEFAULT_NOTES.map((n) => n.title)])
+    saveSeededTitles(allSeenTitles)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ folders: stored.folders, notes: merged }))
+    } catch { /* ignore */ }
+    return { folders: stored.folders, notes: merged }
+  }
+
+  return stored
 }
 
 export const useNotesStore = create<NotesState>((set, get) => {
