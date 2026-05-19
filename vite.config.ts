@@ -82,5 +82,14 @@ export default defineConfig(async () => {
   return {
     base: '/',
     plugins,
+    server: {
+      // Pin to a dedicated port so we don't fight the sibling `studio-ai`
+      // project (which uses 5173). `strictPort` makes Vite fail loudly
+      // instead of silently migrating to an alternate port — IPv4 vs IPv6
+      // dual-stack collisions on 5173 were causing the browser to land on
+      // the wrong project.
+      port: 5180,
+      strictPort: true,
+    },
   }
 })
