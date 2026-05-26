@@ -1,5 +1,4 @@
-import type { CSSProperties, PropsWithChildren } from 'react'
-import { Children, Fragment, createContext, useContext, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { TrafficLights } from '../../../components/TrafficLights'
 import sidebarLeftMediumSvg from '../../../../assets/sf-symbols/sidebar.left--monochrome--medium.svg?raw'
 
@@ -25,7 +24,12 @@ const TRAFFIC_BLOCK_WIDTH = TRAFFIC_LIGHT_DOT * 3 + TRAFFIC_LIGHT_GAP * 2
 /** X position immediately after the traffic-lights cluster. */
 const TRAFFIC_BLOCK_END = TRAFFIC_LEFT_INSET + TRAFFIC_BLOCK_WIDTH
 
-const TOGGLE_CLUSTER_WIDTH = 46
+/** Width of the sidebar-toggle chip (Notes-style 38 × 36 pill — see the
+ *  toggle's JSX comment for the visual rationale). Used to (a) right-anchor
+ *  the toggle inside the sidebar with SIDEBAR_RIGHT_INSET breathing room
+ *  when the sidebar is open, and (b) compute the collapsed-state header
+ *  zone width below. Keep in sync with the toggle's `width` prop. */
+const TOGGLE_CLUSTER_WIDTH = 38
 const SIDEBAR_LEFT_INSET = 10
 const SIDEBAR_RIGHT_INSET = 2
 /** Static gap between traffic-lights cluster and the toggle chip (and to the
@@ -41,147 +45,15 @@ const COLLAPSED_TOGGLE_GAP = 8
 export const COLLAPSED_HEADER_ZONE_WIDTH =
   TRAFFIC_BLOCK_END + COLLAPSED_TOGGLE_GAP + TOGGLE_CLUSTER_WIDTH + COLLAPSED_TOGGLE_GAP
 
-/* Mirror of `SingleClusterHoverContext` in PhotosToolbar — both files have
- * their own copies of `GlassCluster` / `GlassButton`; once those get
- * extracted into a shared primitive (deferred PR), this context will live
- * alongside the shared component. See PhotosToolbar for the full rationale. */
-const SingleClusterHoverContext = createContext(false)
-
-function GlassCluster({
-  children,
-  style,
-  bare = false,
-}: PropsWithChildren<{ style?: CSSProperties; bare?: boolean }>) {
-  // Glass branch mirrors PhotosToolbar's GlassCluster tuning (Tahoe Liquid
-  // Glass: blur 20 / saturate 180, single 0.5 px top highlight, tight 1+8 px
-  // two-stop shadow, lighter 10/5/7 % gradient). Bare branch is intentional —
-  // when the sidebar is visible the toggle chip sits inside the sidebar's
-  // own glass surface, and a second glass capsule on top would re-create the
-  // glass-on-glass stacking we explicitly avoid (see the view-tabs fix).
-  const [hovered, setHovered] = useState(false)
-  /* Single-child cluster → cluster IS the button. Paint a pill-sized hover
-   * overlay covering the whole chip and tell the inner button to suppress
-   * its own 30×30 overlay (otherwise both paint on the same pixels and the
-   * inner rect double-tints). Bare clusters opt out — there's no resting
-   * pill to fill, so a hover pill appearing out of nothing would look wrong. */
-  const fillHover = Children.count(children) === 1 && !bare
-  return (
-    <div
-      style={{
-        // `position: relative` establishes the containing block for the
-        // single-child fillHover overlay below.
-        position: 'relative',
-        display: 'inline-flex',
-        alignItems: 'center',
-        // shrink-0 so the sidebar-toggle chip can never be compressed by its
-        // flex parent (the header row), matching PhotosToolbar's GlassCluster.
-        flexShrink: 0,
-        gap: 1,
-        // Tighter horizontal padding (6 px vs. PhotosToolbar's 8 px) — the
-        // sidebar-toggle cluster is single-button, so the wider 8-px margin
-        // around the 30 × 30 chip read as wasted horizontal space and made
-        // the cluster's outer pill noticeably stretched (46 × 40). 6 px
-        // brings it to 42 × 40, closer to the square-ish single-icon shape
-        // macOS Tahoe uses for compact icon buttons in chrome zones (e.g.
-        // Photos.app's traffic-light-adjacent toolbar buttons), without
-        // collapsing all the way to symmetric padding (which would make it
-        // a perfect 40 × 40 circle and lose the recognizable "pill" silhouette
-        // shared with the multi-button clusters in PhotosToolbar).
-        padding: '5px 6px',
-        borderRadius: 999,
-        background: bare
-          ? 'transparent'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.05) 60%, rgba(255,255,255,0.07) 100%)',
-        backdropFilter: bare ? undefined : 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: bare ? undefined : 'blur(20px) saturate(180%)',
-        boxShadow: bare
-          ? undefined
-          : 'inset 0 0.5px 0 rgba(255,255,255,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.10), 0 1px 1px rgba(0,0,0,0.18), 0 6px 14px -8px rgba(0,0,0,0.30)',
-        filter: bare ? undefined : 'url(#photos-lg-edge)',
-        isolation: 'isolate',
-        ...style,
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {fillHover && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: 999,
-            background: hovered ? 'rgba(255,255,255,0.12)' : 'transparent',
-            transition: 'background 140ms ease',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-      <SingleClusterHoverContext.Provider value={fillHover}>
-        {Children.toArray(children).map((child, i) => (
-          <Fragment key={i}>{child}</Fragment>
-        ))}
-      </SingleClusterHoverContext.Provider>
-    </div>
-  )
-}
-
-function GlassButton({
-  onClick,
-  children,
-  width = 30,
-  height = 30,
-}: PropsWithChildren<{ onClick?: () => void; width?: number; height?: number }>) {
-  const [hovered, setHovered] = useState(false)
-  /* When this button is the sole child of its `GlassCluster`, the cluster
-   * paints a pill-sized hover overlay; suppress the per-button overlay so
-   * we don't double-tint the inner rect. */
-  const inFillHoverCluster = useContext(SingleClusterHoverContext)
-  const showHover = hovered && !inFillHoverCluster
-  return (
-    <div
-      className="flex items-center justify-center"
-      style={{
-        // Pin the icon button at its full hit target — see the matching note
-        // in PhotosToolbar's GlassButton. As a flex child with flex-basis:
-        // auto it would otherwise be free to compress below width/height.
-        position: 'relative',
-        flexShrink: 0,
-        width,
-        height,
-        minWidth: width,
-        minHeight: height,
-        cursor: 'default',
-        color: 'rgba(255,255,255,0.92)',
-      }}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div
-        aria-hidden
-        style={{
-          // Hover overlay is structurally pinned to width×height (centered),
-          // not derived from the outer box — identical pattern to
-          // PhotosToolbar's GlassButton so both 30×30 chips animate the same
-          // hover pill regardless of any parent layout pressure.
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width,
-          height,
-          transform: 'translate(-50%, -50%)',
-          borderRadius: Math.min(width, height) / 2,
-          background: showHover ? 'rgba(255,255,255,0.12)' : 'transparent',
-          transition: 'background 140ms ease',
-          pointerEvents: 'none',
-        }}
-      />
-      <div className="relative flex items-center justify-center">{children}</div>
-    </div>
-  )
-}
+/* GlassCluster / GlassButton / SingleClusterHoverContext used to live here
+ * — local copies of the same primitives in PhotosToolbar — to wrap the
+ * sidebar-toggle chip in a Tahoe Liquid Glass capsule. They were removed
+ * when the toggle was rebuilt to match Notes' chrome chip pixel-for-pixel
+ * (see the JSX comment on the toggle below for the rationale). The
+ * primitives still exist in PhotosToolbar for the toolbar's multi-button
+ * clusters; if a future control in this file needs a glass cluster again,
+ * pull from there (or the eventual shared primitive) rather than
+ * resurrecting a parallel copy. */
 
 export function PhotosSidebarHeader({
   onDragStart,
@@ -192,7 +64,7 @@ export function PhotosSidebarHeader({
   sidebarCollapsed,
   sidebarWidth,
 }: {
-  onDragStart: (e: React.PointerEvent) => void
+  onDragStart: (e: ReactPointerEvent) => void
   onClose?: () => void
   onMinimize?: () => void
   onFullscreen?: () => void
