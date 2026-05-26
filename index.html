@@ -5,9 +5,87 @@
     <link rel="icon" type="image/svg+xml" href="/finder.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>emilyhopeiscool</title>
+
+    <!-- Preload the wallpaper so the lock screen paints before the JS bundle
+         finishes parsing. Same `/wallpaper.jpg` is reused by React's
+         <Wallpaper /> so it stays in the browser cache (one asset, one
+         cache hit, shared by splash + desktop). -->
+    <link rel="preload" as="image" href="/wallpaper.jpg" />
+
+    <!-- macOS lock-screen splash. Inlined so the user sees something on the
+         very first paint, before main.tsx is even fetched. React's
+         createRoot(...).render(<App />) wipes everything inside #root on
+         mount, so no cleanup needed. -->
+    <style>
+      html, body, #root { height: 100%; margin: 0; background: #000; }
+      body {
+        font-family: "SF Pro Display", "SF Pro", -apple-system,
+          BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .lock {
+        position: fixed; inset: 0; overflow: hidden;
+        background-image:
+          linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.45) 100%),
+          url('/wallpaper.jpg');
+        background-size: cover, cover;
+        background-position: center, center;
+        color: #fff;
+        display: flex; flex-direction: column; align-items: center;
+        padding-top: env(safe-area-inset-top);
+      }
+      .lock__date {
+        margin-top: 44px;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        opacity: 0.95;
+      }
+      .lock__time {
+        margin-top: -6px;
+        font-size: clamp(96px, 14vw, 168px);
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        /* "SF Pro Rounded" — Apple's rounded-letterform variant. Falls back
+           to SF Pro Display on non-Apple systems. Same font stack as the
+           React LockScreen so the handoff stays seamless. */
+        font-family: "SF Pro Rounded", "SF Pro Display", "SF Pro",
+          -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial,
+          sans-serif;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .lock { animation: lock-fadein 200ms ease-out both; }
+        @keyframes lock-fadein {
+          from { opacity: 0; } to { opacity: 1; }
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="lock" aria-hidden="true">
+        <div class="lock__date" id="lock-date"></div>
+        <div class="lock__time" id="lock-time"></div>
+      </div>
+      <script>
+        (function () {
+          var d = new Date();
+          var date = d.toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric'
+          }).replace(',', '');
+          // 12-hour, no AM/PM ("12:36", not "12:36 PM") — matches the macOS lock screen.
+          var h12 = d.getHours() % 12 || 12;
+          var mm = String(d.getMinutes()).padStart(2, '0');
+          var time = h12 + ':' + mm;
+          var dEl = document.getElementById('lock-date');
+          var tEl = document.getElementById('lock-time');
+          if (dEl) dEl.textContent = date;
+          if (tEl) tEl.textContent = time;
+        })();
+      </script>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

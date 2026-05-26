@@ -327,12 +327,19 @@ export function NotesWindow({
           </div>
         </div>
 
-        {/* Inner border overlay */}
+        {/* Inner border overlay. Sits 1 px inside the window's rounded
+         *  rect to give the chrome a defined edge against the wallpaper
+         *  behind it. Opacity backed off from 0.35 → 0.22 — at 0.35 the
+         *  rim read as a hairline rather than a soft chrome edge, which
+         *  fought with the WINDOW_SHADOW outer glow on light wallpapers.
+         *  0.22 keeps the edge legible on the dark window fill (#1E1E1E)
+         *  while letting the outer shadow do most of the "where the
+         *  window stops" work, matching macOS Tahoe's softer chrome rim. */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             borderRadius: fullscreen ? 0 : 24,
-            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.35)',
+            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.22)',
           }}
         />
       </div>

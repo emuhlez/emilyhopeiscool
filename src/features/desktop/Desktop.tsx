@@ -63,13 +63,31 @@ function DockDivider({
   )
 }
 
+/**
+ * Dock representation of a minimized window — *always* a window-shaped
+ * thumbnail (34×24 rounded rect with a corner badge), never the running-app
+ * icon. macOS Tahoe Photos.app's contract is: minimized things in the dock
+ * read as miniature windows, regular dock icons read as app launchers, and
+ * those two shapes don't get confused.
+ *
+ * Two render modes share that 34×24 footprint:
+ *
+ *  - **Captured** (`snapshot` truthy): the real `html-to-image` PNG of the
+ *    window's last frame, with the app icon as a small bottom-right badge.
+ *  - **Placeholder** (`snapshot` undefined): a dark gradient with the app
+ *    icon centered. Used when capture failed (cross-origin canvas taint,
+ *    backdrop-filter quirks, etc.). Without this branch the previous code
+ *    fell back to a full-size DockIcon — which broke the "windows, not
+ *    apps" contract by rendering minimized things as if they were
+ *    launchable apps.
+ */
 function MinimizedSnapshot({
   snapshot,
   iconUrl,
   label,
   onClick,
 }: {
-  snapshot: string
+  snapshot?: string
   iconUrl: string
   label: string
   onClick: () => void
@@ -100,20 +118,44 @@ function MinimizedSnapshot({
         style={{ height: 'var(--dock-icon-size)' }}
       >
         <div className="relative" style={{ width: 34, height: 24, cursor: 'pointer' }}>
-          <img
-            src={snapshot}
-            alt={label}
-            draggable={false}
-            style={{
-              width: 34,
-              height: 24,
-              objectFit: 'cover',
-              objectPosition: 'top left',
-              borderRadius: 'calc(var(--dock-icon-size) / 8)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 0.5px rgba(255,255,255,0.12)',
-            }}
-          />
-          {/* App icon overlay */}
+          {/* Both branches share the EXACT same layout: a 34×24 main thumbnail
+           *  + a 12×12 corner-badge app icon at bottom-right. The only thing
+           *  that varies is whether the main area is the real captured PNG
+           *  or a dark gradient fill. Keeping the badge in the same place
+           *  means the dock reads as "Notes-style minimized window" for
+           *  every app, regardless of capture success. */}
+          {snapshot ? (
+            <img
+              src={snapshot}
+              alt={label}
+              draggable={false}
+              style={{
+                width: 34,
+                height: 24,
+                objectFit: 'cover',
+                objectPosition: 'top left',
+                borderRadius: 'calc(var(--dock-icon-size) / 8)',
+                boxShadow:
+                  '0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 0.5px rgba(255,255,255,0.12)',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 34,
+                height: 24,
+                borderRadius: 'calc(var(--dock-icon-size) / 8)',
+                background:
+                  'linear-gradient(135deg, rgba(70, 70, 70, 0.78), rgba(34, 34, 34, 0.82))',
+                boxShadow:
+                  '0 2px 8px rgba(0,0,0,0.30), inset 0 0 0 0.5px rgba(255,255,255,0.14)',
+              }}
+            />
+          )}
+          {/* Corner-badge app icon — applies to both captured AND placeholder
+           *  thumbnails so the layout is identical. The main thumbnail tells
+           *  you which window; the badge tells you which app the window
+           *  belongs to. Same convention macOS Tahoe's dock uses. */}
           <img
             src={iconUrl}
             alt=""
@@ -208,25 +250,22 @@ export function Desktop() {
           })}
           <DockDivider onSizeChange={setDockIconSize} iconSize={dockIconSize} />
           <div data-genie-target style={{ height: 'var(--dock-icon-size)', width: 0 }} />
+          {/* Minimized-windows region of the dock: ALWAYS render
+           *  <MinimizedSnapshot>, never <DockIcon>. The `snapshot` prop is
+           *  optional — when capture succeeded it shows the real PNG, when
+           *  capture failed (cross-origin canvas taint, etc.) it shows a
+           *  window-shaped placeholder. The previous code fell back to
+           *  <DockIcon> here, which violated the "windows, not apps" rule
+           *  by rendering full-size launchable-looking app icons in the
+           *  minimized region of the dock. */}
           {Array.from(minimizedApps).map((appId) => {
             const app = APP_REGISTRY[appId]
             if (!app) return null
-            const snapshot = minimizedSnapshots.get(appId)
-            if (snapshot) {
-              return (
-                <MinimizedSnapshot
-                  key={`minimized-${appId}`}
-                  snapshot={snapshot}
-                  iconUrl={app.iconUrl}
-                  label={app.name}
-                  onClick={() => unminimizeApp(appId)}
-                />
-              )
-            }
             return (
-              <DockIcon
+              <MinimizedSnapshot
                 key={`minimized-${appId}`}
-                src={app.iconUrl}
+                snapshot={minimizedSnapshots.get(appId)}
+                iconUrl={app.iconUrl}
                 label={app.name}
                 onClick={() => unminimizeApp(appId)}
               />
