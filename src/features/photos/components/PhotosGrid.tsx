@@ -4,7 +4,9 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
+import { LayoutGroup, motion } from 'framer-motion'
 import {
+  bucketPhotos,
   filterPhotosBySection,
   usePhotosStore,
   type PhotoItem,
@@ -27,13 +29,6 @@ const PINCH_DELTA_PER_UNIT = 250
  * adjacent stops. */
 const ROW_HEIGHTS = [80, 100, 120, 145, 175] as const
 
-/* Height of the floating photo / video count footer (px). The footer is
- * absolutely positioned at the bottom of the grid so photos scroll behind
- * it — this constant is also used to push the scroll container's bottom
- * padding clear of the footer and to inset the custom scrollbar so its
- * thumb resting position lines up with the footer's top edge. */
-const FOOTER_H = 28
-
 /* Density (target sum of aspect ratios per row) for justified zooms 2..5.
  * Lower number = fewer photos per row = each photo takes more horizontal
  * space. Each stop reads as a distinctly different *layout density*:
@@ -51,6 +46,42 @@ function interpolateRowHeight(zoom: number): number {
   return ROW_HEIGHTS[lo - 1] * (1 - t) + ROW_HEIGHTS[hi - 1] * t
 }
 
+type Row = {
+  items: PhotoItem[]
+  ratios: number[]
+  totalRatio: number
+}
+
+/** Pack a flat list of photos into justified rows. The same algorithm the
+ *  pre-Months/Years grid used inline; lifted to a function so each section
+ *  in Months/Years view can pack independently (otherwise short months would
+ *  share a row with the next month, which breaks the visual section break).
+ *  `fixedPerRow` and `targetRatioSum` come from the active zoom level. */
+function packRows(
+  photos: PhotoItem[],
+  fixedPerRow: number | null,
+  targetRatioSum: number,
+): Row[] {
+  const rows: Row[] = []
+  let current: Row = { items: [], ratios: [], totalRatio: 0 }
+  for (const p of photos) {
+    const r = p.width / p.height
+    current.items.push(p)
+    current.ratios.push(r)
+    current.totalRatio += r
+    const shouldBreak =
+      fixedPerRow != null
+        ? current.items.length >= fixedPerRow
+        : current.totalRatio >= targetRatioSum
+    if (shouldBreak) {
+      rows.push(current)
+      current = { items: [], ratios: [], totalRatio: 0 }
+    }
+  }
+  if (current.items.length > 0) rows.push(current)
+  return rows
+}
+
 function formatDuration(s: number): string {
   const m = Math.floor(s / 60)
   const sec = Math.floor(s % 60)
@@ -58,9 +89,16 @@ function formatDuration(s: number): string {
 }
 
 /**
- * Single photo tile + its overlays (comment badge, video duration, favorite
- * heart). Extracted so the justified-row mode and the uniform-square-grid
- * mode can render the same visual without duplicating the overlay JSX.
+ * Single photo tile + its overlays (video duration, favorite heart).
+ * Extracted so the justified-row mode and the uniform-square-grid mode can
+ * render the same visual without duplicating the overlay JSX.
+ *
+ * No hover state. The previous opacity dim on hover was visible through the
+ * floating toolbar's translucent glass and through the right-edge scrollbar
+ * gutter, which read as the hover effect "bleeding" into the chrome —
+ * macOS Photos.app itself doesn't dim photos on cursor hover, so this is
+ * the closer match. Selection (click) is still indicated by the blue
+ * outline.
  *
  * Sizing is layout-mode dependent and passed in via `style`:
  *  - Justified mode passes `flex: <ratio>` so the tile fills its row slice.
@@ -70,25 +108,52 @@ function formatDuration(s: number): string {
 function PhotoTile({
   photo,
   isSelected,
-  isHovered,
   onClick,
-  onMouseEnter,
-  onMouseLeave,
   style,
   square = false,
+  animateLayout = true,
 }: {
   photo: PhotoItem
   isSelected: boolean
-  isHovered: boolean
   onClick: () => void
-  onMouseEnter: () => void
-  onMouseLeave: () => void
   style: CSSProperties
   /** When true, the photo is rendered as a true 1:1 square (zoom-1 mode). */
   square?: boolean
+  /** When false (e.g. during an active pinch-zoom gesture), framer-motion's
+   *  per-tile layout tracking is disabled — the tile snaps to whatever
+   *  position/size flex+grid resolve to without an interpolated transform.
+   *  This is what keeps pinch zoom feeling 1:1 with the trackpad gesture
+   *  rather than perpetually 320 ms behind it. Layout animation is
+   *  re-enabled the moment the gesture ends, so the snap-to-integer-stop
+   *  shift IS animated, and any subsequent viewMode change still
+   *  triggers the photo migration. */
+  animateLayout?: boolean
 }) {
+  /* Each tile is a `motion.div` with `layout` so when the parent grid
+   * reorganizes (viewMode → bucketing change, or square↔justified zoom
+   * crossover), the SAME tile element migrates from its old screen position
+   * to its new one with a single smooth tween rather than unmounting +
+   * remounting in place.
+   *
+   * Photos keep `key={photo.id}` at every call site, so framer-motion can
+   * track tile identity across re-parenting (a photo's parent changes from
+   * "row 3 of one big section" to "row 1 of section 'April 2026'" — the
+   * tile is the same element to framer because the key matched).
+   *
+   * Transition is split intentionally:
+   *  - `layout` runs at 320 ms / cubic-bezier(0.32, 0.72, 0, 1) — long
+   *    enough to read as a graceful migration on view-mode swaps (where
+   *    photos can travel hundreds of pixels), short enough to not feel
+   *    sluggish on incidental layout changes (zoom step).
+   *  - All non-layout props (e.g. `outline` color jumping when selection
+   *    changes) use the framer default. We deliberately don't add an
+   *    opacity fade — that's the previous crossfade approach, and the
+   *    user wants the photos themselves to stay visible throughout the
+   *    transition.
+   */
   return (
-    <div
+    <motion.div
+      layout={animateLayout}
       className="relative overflow-hidden"
       style={{
         minWidth: 0,
@@ -96,27 +161,30 @@ function PhotoTile({
         borderRadius: square ? 0 : 3,
         outline: isSelected ? '2.5px solid #0A84FF' : 'none',
         outlineOffset: square ? 0 : -2,
-        opacity: isHovered && !isSelected ? 0.92 : 1,
-        transition: 'opacity 140ms cubic-bezier(0.32, 0.72, 0, 1)',
         ...style,
       }}
+      transition={{
+        layout: { duration: 0.32, ease: [0.32, 0.72, 0, 1] },
+      }}
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
       <img
         src={photo.src}
         alt={photo.alt}
         loading="lazy"
+        /* `crossorigin="anonymous"` is required for the dock-thumbnail
+         * capture path. `useMinimizeAnimation` rasterizes the window via
+         * `html-to-image.toPng`, which paints each <img> onto an
+         * off-screen canvas. Without this attribute, cross-origin images
+         * (picsum.photos serves the seed library) taint the canvas and
+         * `canvas.toDataURL()` throws SecurityError, causing the capture
+         * to silently fail and the dock to fall back to the placeholder
+         * thumbnail. picsum.photos serves `Access-Control-Allow-Origin:
+         * *`, so opting in here is sufficient. */
+        crossOrigin="anonymous"
         className="h-full w-full object-cover"
         draggable={false}
       />
-
-      {photo.hasComment && (
-        <div className="absolute" style={{ left: 4, bottom: 4 }}>
-          <CommentBadge />
-        </div>
-      )}
 
       {photo.isVideo && photo.duration != null && (
         <div
@@ -137,7 +205,7 @@ function PhotoTile({
         </div>
       )}
 
-      {photo.favorite && !photo.hasComment && (
+      {photo.favorite && (
         <div className="absolute" style={{ left: 4, bottom: 4 }}>
           <svg width="11" height="11" viewBox="0 0 16 16" fill="#fff">
             <path
@@ -147,30 +215,7 @@ function PhotoTile({
           </svg>
         </div>
       )}
-    </div>
-  )
-}
-
-function CommentBadge() {
-  return (
-    <div
-      className="flex items-center justify-center"
-      style={{
-        width: 14,
-        height: 14,
-        borderRadius: 999,
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(4px)',
-        WebkitBackdropFilter: 'blur(4px)',
-      }}
-    >
-      <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-        <path
-          d="M1.4 4.5 a3 3 0 1 1 1.4 2.5 L1 8 L1.6 6.4 a3 3 0 0 1 -0.2 -1.9 z"
-          fill="#fff"
-        />
-      </svg>
-    </div>
+    </motion.div>
   )
 }
 
@@ -179,12 +224,21 @@ export function PhotosGrid({ topInset = 0 }: { topInset?: number }) {
   const selectedSection = usePhotosStore((s) => s.selectedSection)
   const selectedPhotoId = usePhotosStore((s) => s.selectedPhotoId)
   const selectPhoto = usePhotosStore((s) => s.selectPhoto)
+  const viewMode = usePhotosStore((s) => s.viewMode)
   const zoom = usePhotosStore((s) => s.zoom)
   const nudgeZoom = usePhotosStore((s) => s.nudgeZoom)
   const snapZoom = usePhotosStore((s) => s.snapZoom)
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const isPinchingRef = useRef(false)
+  /* Mirror of `isPinchingRef` as state, so we can pass the pinching flag
+   * down to `PhotoTile` and disable framer-motion's layout tracking during
+   * the gesture. The ref exists to track the flag inside the wheel handler
+   * without re-rendering on every wheel tick (which would re-render all 56
+   * photo tiles 60 times per second). The state ONLY transitions twice per
+   * gesture — once on the first tick (false → true) and once after the
+   * end-of-gesture debounce (true → false) — so the re-render cost is
+   * bounded to two renders per pinch session, not per frame. */
+  const [isPinching, setIsPinching] = useState(false)
 
   /* Wire up trackpad-pinch / Ctrl+wheel zoom. We attach the native event
    * directly (rather than React's `onWheel`) so we can register with
@@ -206,14 +260,22 @@ export function PhotosGrid({ topInset = 0 }: { topInset?: number }) {
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return // plain scroll: let the container scroll normally
       e.preventDefault()
-      // Mark active so we can suppress the row-height CSS transition (the
-      // transition is for *toolbar* steps and snap-on-release; during the
-      // pinch itself we want the height to follow the gesture frame-by-frame
-      // with zero lag).
-      isPinchingRef.current = true
+      // Mark active so we can suppress framer-motion's per-tile layout
+      // animation during the gesture (during the pinch itself we want
+      // photos to follow the gesture frame-by-frame via flex/grid, with
+      // zero animation lag — same intent as the previous CSS-transition
+      // suppression). The ref drives the wheel handler; the state mirror
+      // is what re-renders PhotoTile so it can flip its `layout` prop.
+      // We only set the state on the leading edge (so per-tick re-renders
+      // are avoided) — and back on the trailing debounce.
+      if (!isPinchingRef.current) {
+        isPinchingRef.current = true
+        setIsPinching(true)
+      }
       if (pinchEndTimer != null) window.clearTimeout(pinchEndTimer)
       pinchEndTimer = window.setTimeout(() => {
         isPinchingRef.current = false
+        setIsPinching(false)
         snapZoom()
       }, PINCH_END_DEBOUNCE_MS)
       // Pinch apart → deltaY < 0 → zoom in.
@@ -242,33 +304,13 @@ export function PhotosGrid({ topInset = 0 }: { topInset?: number }) {
   const photoGap = isSquareMode ? 0 : Math.max(2, rowHeight * 0.08)
   const FIXED_PER_ROW = snappedZoom >= 5 ? 2 : null
   const TARGET_RATIO_SUM = RATIO_SUM_BY_ZOOM[snappedZoom - 1]
-  const containerWidth = 0
 
-  type Row = {
-    items: typeof filteredPhotos
-    ratios: number[]
-    totalRatio: number
-  }
-  const rows: Row[] = []
-  let current: Row = { items: [], ratios: [], totalRatio: 0 }
-  for (const p of filteredPhotos) {
-    const r = p.width / p.height
-    current.items.push(p)
-    current.ratios.push(r)
-    current.totalRatio += r
-    const shouldBreak =
-      FIXED_PER_ROW != null
-        ? current.items.length >= FIXED_PER_ROW
-        : current.totalRatio >= TARGET_RATIO_SUM
-    if (shouldBreak) {
-      rows.push(current)
-      current = { items: [], ratios: [], totalRatio: 0 }
-    }
-  }
-  if (current.items.length > 0) rows.push(current)
-
-  // Reference container width unused at runtime but useful to silence TS
-  void containerWidth
+  /* Bucket the filtered list by ViewMode. For 'all' this is one section
+   * with `label === ''` (no header rendered). For 'months'/'years' each
+   * section is one calendar period and gets its own header + its own
+   * justified-row pack — short months don't bleed into the next month's
+   * first row. */
+  const sections = bucketPhotos(filteredPhotos, viewMode)
 
   const photoCount = filteredPhotos.filter((p) => !p.isVideo).length
   const videoCount = filteredPhotos.filter((p) => p.isVideo).length
@@ -279,16 +321,19 @@ export function PhotosGrid({ topInset = 0 }: { topInset?: number }) {
         ref={scrollRef}
         className="photos-grid-scroll min-h-0 flex-1 overflow-y-auto"
         style={{
-          // Drives `::-webkit-scrollbar-track`/`-thumb` margin-top/bottom in
+          // Drives `::-webkit-scrollbar-track`/`-thumb` margin-top in
           // index.css so the visible scrollbar starts below the floating
-          // toolbar and stops above the floating footer instead of running
-          // behind either. paddingTop / paddingBottom still push the first
-          // and last photo rows clear of the floating chrome — only the
-          // scrollbar gutter is inset.
+          // toolbar instead of running behind it. paddingTop pushes the
+          // first photo row clear of the toolbar — only the scrollbar
+          // gutter is inset.
+          //
+          // The bottom inset (`--photos-scrollbar-inset-bottom`) is left at
+          // its 0 default in CSS — the photo / video count footer is now
+          // an in-flow element at the end of the scrolled content rather
+          // than a floating chrome strip, so the scrollbar can run all the
+          // way to the bottom edge.
           ['--photos-scrollbar-inset-top' as any]: `${topInset}px`,
-          ['--photos-scrollbar-inset-bottom' as any]: `${FOOTER_H}px`,
           paddingTop: topInset + 4,
-          paddingBottom: FOOTER_H + 4,
           // Horizontal insets come from `scrollbar-gutter: stable both-edges`
           // in index.css, not paddingLeft/Right — that way the gutter on the
           // right (which houses the scrollbar when it appears) is mirrored
@@ -315,125 +360,211 @@ export function PhotosGrid({ topInset = 0 }: { topInset?: number }) {
             </span>
           </div>
         )}
-        {!isEmpty && isSquareMode && (
-          /* Uniform-square contact-sheet grid at the smallest zoom.
-           * CSS Grid with `auto-fill` + `1fr` packs as many ≥`rowHeight`
-           * columns as fit, then stretches them to consume the full
-           * container width — so each row spans edge-to-edge with no
-           * leftover gap on the right. `aspect-ratio: 1` on each tile
-           * keeps cells square as the column width stretches. Matches
-           * macOS Photos.app's "All Photos" smallest-zoom layout. */
+        {/* Sections list — wrapped in <LayoutGroup> so that on viewMode
+         *  change, every PhotoTile (each a `motion.div layout` with a
+         *  stable `key={photo.id}`) measures its old vs. new screen
+         *  position and animates between them. Photos are NOT unmounted
+         *  during the swap; they migrate. From the user's POV the photos
+         *  themselves are "fixed" (always present, never blink) and the
+         *  layout change eases them into their new slots — replacing the
+         *  previous opacity crossfade.
+         *
+         *  Why LayoutGroup (vs. relying on framer's auto root):
+         *  - Scopes layout coordination to just this grid. If we ever
+         *    add a second motion.layout-using surface elsewhere in
+         *    Photos (e.g. an inspector that shows the same tile in a
+         *    second pane), they won't accidentally try to share layout.
+         *  - Framer's docs explicitly recommend wrapping a list whose
+         *    items can re-parent so position tracking stays correct
+         *    across DOM tree shuffles (which is exactly what the
+         *    months/years bucketing does).
+         *
+         *  Header/structure animations (date headers fading in/out,
+         *  inter-section gaps growing/collapsing) are handled by the
+         *  motion children's `layout` measurements as well — when a
+         *  header appears between two photos, the photos below it
+         *  animate down to make room rather than snapping. */}
+        {!isEmpty && (
+          <LayoutGroup id="photos-grid">
+            <div>
+              {sections.map((section, sectionIdx) => {
+            // Pre-compute per-section justified rows when not in square mode.
+            // Square mode renders one CSS Grid per section directly (cheaper
+            // than flex packing and matches the contact-sheet layout).
+            const sectionRows = !isSquareMode
+              ? packRows(section.photos, FIXED_PER_ROW, TARGET_RATIO_SUM)
+              : []
+            // Inter-section spacing matches macOS Photos.app: a comfortable
+            // gap between months/years so the date-header acts as a natural
+            // visual break. No gap below the last section — the photo/video
+            // count footer below provides its own padding.
+            const isLastSection = sectionIdx === sections.length - 1
+            return (
+              <div
+                key={section.key}
+                style={{
+                  marginBottom: !isLastSection && section.label ? 28 : 0,
+                }}
+              >
+                {section.label && (
+                  /* Date header for Months/Years views. Suppressed in
+                   * 'all' mode (label === ''). Top padding shrinks on the
+                   * first section so the first header sits just below the
+                   * scroll-area's existing topInset padding rather than
+                   * doubling up. */
+                  <div
+                    style={{
+                      paddingTop: sectionIdx === 0 ? 4 : 16,
+                      paddingBottom: 12,
+                      paddingLeft: 4,
+                    }}
+                  >
+                    <h2
+                      style={{
+                        fontFamily:
+                          '"SF Pro Display", "SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                        fontSize: 22,
+                        fontWeight: 700,
+                        letterSpacing: '-0.4px',
+                        color: 'rgba(255,255,255,0.95)',
+                        margin: 0,
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {section.label}
+                    </h2>
+                    {section.sublabel && (
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontFamily:
+                            '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          letterSpacing: 0.1,
+                          color: 'rgba(255,255,255,0.55)',
+                        }}
+                      >
+                        {section.sublabel}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isSquareMode ? (
+                  /* Uniform-square contact-sheet grid at the smallest
+                   * zoom. CSS Grid with `auto-fill` + `1fr` packs as many
+                   * ≥`rowHeight` columns as fit, then stretches them to
+                   * consume the full container width — each row spans
+                   * edge-to-edge with no leftover gap. `aspect-ratio: 1`
+                   * keeps cells square as columns stretch. Matches macOS
+                   * Photos.app's "All Photos" smallest-zoom layout. One
+                   * grid per section so each month/year contact-sheet
+                   * stays visually self-contained. */
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: `repeat(auto-fill, minmax(${rowHeight}px, 1fr))`,
+                      gap: 0,
+                      alignContent: 'flex-start',
+                    }}
+                  >
+                    {section.photos.map((photo) => (
+                      <PhotoTile
+                        key={photo.id}
+                        photo={photo}
+                        isSelected={photo.id === selectedPhotoId}
+                        onClick={() => selectPhoto(photo.id)}
+                        animateLayout={!isPinching}
+                        square
+                        style={{ aspectRatio: '1 / 1' }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  sectionRows.map((row, rowIdx) => (
+                    <div
+                      key={rowIdx}
+                      className="flex"
+                      style={{
+                        gap: photoGap,
+                        marginBottom: photoGap,
+                        height: rowHeight,
+                        /* No CSS transition on the row container itself —
+                         * framer-motion's `layout` on each PhotoTile now
+                         * owns all zoom + viewMode animation. The previous
+                         * CSS-transition + framer-layout combo
+                         * double-animated (CSS interpolated row height
+                         * over 220 ms while framer tried to
+                         * transform-undo the size change), producing a
+                         * subtle scale jitter mid-zoom. Letting framer be
+                         * the single source of motion truth fixes that. */
+                      }}
+                    >
+                      {row.items.map((photo, i) => (
+                        <PhotoTile
+                          key={photo.id}
+                          photo={photo}
+                          isSelected={photo.id === selectedPhotoId}
+                          onClick={() => selectPhoto(photo.id)}
+                          animateLayout={!isPinching}
+                          style={{ flex: row.ratios[i] }}
+                        />
+                      ))}
+                      {/* Spacer for the section's last incomplete row so
+                       * its photos render at the correct flex height
+                       * instead of stretching to fill leftover space.
+                       * Per-section (not just the very last row of the
+                       * scroll container) so each month's last row reads
+                       * as left-aligned, matching macOS Photos.app. */}
+                      {row.totalRatio < TARGET_RATIO_SUM &&
+                        rowIdx === sectionRows.length - 1 && (
+                          <div
+                            style={{
+                              flex: TARGET_RATIO_SUM - row.totalRatio,
+                              minWidth: 0,
+                            }}
+                          />
+                        )}
+                    </div>
+                  ))
+                )}
+              </div>
+                )
+              })}
+            </div>
+          </LayoutGroup>
+        )}
+
+        {/* Photo / video count caption — in-flow at the end of the scrolled
+            content. Matches macOS Photos.app: small muted caption text that
+            scrolls with the photos rather than living on a sticky footer
+            chrome. Generous vertical padding gives the text breathing room
+            once it scrolls into view. */}
+        {!isEmpty && (
           <div
-            className="grid"
+            className="flex justify-center"
             style={{
-              gridTemplateColumns: `repeat(auto-fill, minmax(${rowHeight}px, 1fr))`,
-              gap: 0,
-              alignContent: 'flex-start',
+              paddingTop: 32,
+              paddingBottom: 24,
             }}
           >
-            {filteredPhotos.map((photo) => (
-              <PhotoTile
-                key={photo.id}
-                photo={photo}
-                isSelected={photo.id === selectedPhotoId}
-                isHovered={photo.id === hoveredId}
-                onClick={() => selectPhoto(photo.id)}
-                onMouseEnter={() => setHoveredId(photo.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                square
-                style={{ aspectRatio: '1 / 1' }}
-              />
-            ))}
+            <span
+              style={{
+                fontFamily:
+                  '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: 0.2,
+                color: 'rgba(255,255,255,0.55)',
+              }}
+            >
+              {photoCount} {photoCount === 1 ? 'Photo' : 'Photos'}
+              {videoCount > 0 &&
+                `, ${videoCount} ${videoCount === 1 ? 'Video' : 'Videos'}`}
+            </span>
           </div>
         )}
-        {!isEmpty && !isSquareMode && rows.map((row, rowIdx) => (
-          <div
-            key={rowIdx}
-            className="flex"
-            style={{
-              gap: photoGap,
-              marginBottom: photoGap,
-              height: rowHeight,
-              /* During a trackpad pinch the height + gap already update
-               * frame-by-frame with the gesture — a transition there would
-               * *lag* behind the user's fingers. Only animate when the zoom
-               * value was changed by the toolbar +/- buttons (discrete step). */
-              transition: isPinchingRef.current
-                ? 'none'
-                : 'height 220ms cubic-bezier(0.32, 0.72, 0, 1), gap 220ms cubic-bezier(0.32, 0.72, 0, 1), margin-bottom 220ms cubic-bezier(0.32, 0.72, 0, 1)',
-            }}
-          >
-            {row.items.map((photo, i) => (
-              <PhotoTile
-                key={photo.id}
-                photo={photo}
-                isSelected={photo.id === selectedPhotoId}
-                isHovered={photo.id === hoveredId}
-                onClick={() => selectPhoto(photo.id)}
-                onMouseEnter={() => setHoveredId(photo.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                style={{ flex: row.ratios[i] }}
-              />
-            ))}
-            {/* Spacer item for last incomplete row to keep heights consistent */}
-            {row.totalRatio < TARGET_RATIO_SUM && rowIdx === rows.length - 1 && (
-              <div style={{ flex: TARGET_RATIO_SUM - row.totalRatio, minWidth: 0 }} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Floating photo / video count footer. Absolutely positioned at the
-          bottom of the grid so photos scroll *behind* it (matching the
-          floating toolbar at the top). Frost material mirrors the toolbar's
-          backing strip; top edge dissolves via a mask gradient so the band
-          fades into the scrolling photo content above instead of cutting
-          with a hairline. The visible scrollbar stops at the footer's top
-          edge thanks to `--photos-scrollbar-inset-bottom` set on the
-          scroll container. */}
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: FOOTER_H,
-          zIndex: 15,
-        }}
-      >
-        {/* Frost backing — masked separately from the text so the top fade
-            doesn't dim the label. */}
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background: 'rgba(28, 28, 30, 0.50)',
-            backdropFilter: 'blur(30px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(30px) saturate(160%)',
-            boxShadow: 'inset 0 -0.5px 0 rgba(255, 255, 255, 0.06)',
-            maskImage:
-              'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0.7) calc(100% - 6px), rgba(0,0,0,0) 100%)',
-            WebkitMaskImage:
-              'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0.7) calc(100% - 6px), rgba(0,0,0,0) 100%)',
-          }}
-        />
-        {/* Text layer — sits on top of the frost, unaffected by the mask. */}
-        <div className="relative flex h-full items-center justify-center">
-          <span
-            style={{
-              fontFamily:
-                '"SF Pro", -apple-system, BlinkMacSystemFont, sans-serif',
-              fontSize: 18,
-              fontWeight: 500,
-              letterSpacing: 0.3,
-              color: 'rgba(255,255,255,0.99)',
-            }}
-          >
-            {photoCount} {photoCount === 1 ? 'Photo' : 'Photos'}
-            {videoCount > 0 &&
-              `, ${videoCount} ${videoCount === 1 ? 'Video' : 'Videos'}`}
-          </span>
-        </div>
       </div>
     </div>
   )

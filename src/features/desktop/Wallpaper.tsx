@@ -1,10 +1,13 @@
 import { motion, useReducedMotion } from 'framer-motion'
 
-import wallpaperUrl from '../../../desktop/macintosh-desktop.png?url'
+// Served from `public/wallpaper.jpg` so the URL is stable and shared with the
+// inlined lock-screen splash in `index.html` — both hit the same cached asset
+// instead of two different hashed bundles.
+const wallpaperUrl = '/wallpaper.jpg'
 
 /**
  * macOS-ish wallpaper background.
- * Uses `desktop/macintosh-desktop.png` (bundled by Vite), with subtle movement unless reduced-motion.
+ * Uses the same `/wallpaper.png` the inline splash preloads, with subtle movement unless reduced-motion.
  */
 export function Wallpaper() {
   const reduceMotion = useReducedMotion()
