@@ -1,15 +1,21 @@
-import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight } from 'lucide-react'
 import type { MentionQuery, PillInputHandle, PillKind } from '../../types'
-import { publicUrl } from '../../utils/assetUrl'
 import styles from './MentionDropdown.module.css'
 
 export interface MentionItem {
   id: string
   label: string
   kind: PillKind
-  category: 'collaborator' | 'object' | 'tool'
+  category: 'script' | 'folder' | 'active-tab' | 'doc'
   /** For scene objects: the GameObject type or primitiveType, used to pick the right icon */
   objectType?: string
 }
@@ -21,79 +27,32 @@ interface MentionDropdownProps {
   onClose: () => void
 }
 
-type CategoryKey = 'collaborator' | 'object' | 'tool'
+type CategoryKey = 'script' | 'folder' | 'active-tab' | 'doc'
 
-const CATEGORY_ORDER: CategoryKey[] = ['collaborator', 'object', 'tool']
-const CATEGORY_LABELS: Record<string, string> = {
-  collaborator: 'Collaborators',
-  object: 'Scene Objects',
-  tool: 'Tools',
-}
-
-/** Collaborator avatar colors (deterministic by name) */
-const AVATAR_COLORS = ['#7b8af9', '#f97b8a', '#8af97b', '#f9d67b', '#7bf9e0', '#d67bf9']
-
-/** Small avatar for collaborators — initial-based, no external network requests */
-function CollaboratorAvatar({ label }: { label: string }) {
-  const initial = (label || '?').charAt(0).toUpperCase()
-  const colorIdx = label.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
-  return (
-    <span
-      className={styles.avatar}
-      aria-hidden
-      title={label}
-      style={{ background: AVATAR_COLORS[colorIdx] }}
-    >
-      <span className={styles.avatarInitial}>{initial}</span>
-    </span>
-  )
-}
-
-/** Map scene-object types to their explorer-style icons (mirrors PillInput). */
-const OBJECT_TYPE_ICON_PATH: Record<string, string> = {
-  model: 'icons/model.svg',
-  mesh: 'icons/meshpart.svg',
-  meshpart: 'icons/meshpart.svg',
-  camera: 'icons/camera.svg',
-  terrain: 'icons/terrain.svg',
-  light: 'icons/terrain.svg',
-}
-
-/** FileCode icon for script objects (mirrors PillInput's inline SVG). */
-const FILECODE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/></svg>`
-
-function ObjectTypeIcon({ objectType }: { objectType?: string }) {
-  if (objectType === 'script') {
-    return (
-      <span
-        aria-hidden
-        style={{ display: 'inline-flex', alignItems: 'center' }}
-        dangerouslySetInnerHTML={{ __html: FILECODE_SVG }}
-      />
-    )
-  }
-  const path = OBJECT_TYPE_ICON_PATH[objectType ?? ''] ?? 'icons/model.svg'
-  return <img src={publicUrl(path)} alt="" width={12} height={12} aria-hidden />
-}
-
-function ItemIcon({ item }: { item: MentionItem }) {
-  if (item.category === 'collaborator') {
-    return <CollaboratorAvatar label={item.label} />
-  }
-  if (item.category === 'object') {
-    return <ObjectTypeIcon objectType={item.objectType} />
-  }
-  return null
+const CATEGORY_ORDER: CategoryKey[] = ['script', 'folder', 'active-tab', 'doc']
+const CATEGORY_LABELS: Record<CategoryKey, string> = {
+  script: 'Scripts',
+  folder: 'Folders',
+  'active-tab': 'Active Tabs',
+  doc: 'Docs',
 }
 
 const SUBMENU_HOVER_DELAY_MS = 120
+
+/** Must match `.subMenu { max-height }` in MentionDropdown.module.css */
+const SUBMENU_MAX_HEIGHT_PX = 240
 
 export function MentionDropdown({ mention, items, pillInputRef, onClose }: MentionDropdownProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const subMenuRef = useRef<HTMLDivElement>(null)
   const selectedRef = useRef(0)
+  const subSelectedRef = useRef(0)
   const closeSubMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [expandedCategory, setExpandedCategory] = useState<CategoryKey | null>(null)
+  const [subSelected, setSubSelected] = useState(0)
+  const prevExpandedCategoryRef = useRef<CategoryKey | null>(null)
+  /** When true, opening a category submenu should highlight the last item (wrap ↑ from first main row). */
+  const openSubmenuAtLastItemRef = useRef(false)
 
   const clearCloseSubMenuTimeout = useCallback(() => {
     if (closeSubMenuTimeoutRef.current !== null) {
@@ -134,17 +93,79 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
 
   const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
 
-  // Reset selection when query changes
-  useEffect(() => {
+  const updateSubMenuHighlight = useCallback(() => {
+    const options = subMenuRef.current?.querySelectorAll('[role="option"]')
+    const idx = subSelectedRef.current
+    options?.forEach((el, i) => {
+      ;(el as HTMLElement).dataset.selected = String(i === idx)
+    })
+    options?.[idx]?.scrollIntoView({ block: 'nearest' })
+  }, [])
+
+  const updateHighlight = useCallback(() => {
+    const options = menuRef.current?.querySelectorAll('[role="option"]')
+    options?.forEach((el, i) => {
+      ;(el as HTMLElement).dataset.selected = String(i === selectedRef.current)
+    })
+    options?.[selectedRef.current]?.scrollIntoView({ block: 'nearest' })
+  }, [])
+
+  // Reset selection when query changes — layout so refs are correct before highlight sync paint
+  useLayoutEffect(() => {
     selectedRef.current = 0
+    subSelectedRef.current = 0
+    setSubSelected(0)
     setExpandedCategory(null)
     clearCloseSubMenuTimeout()
   }, [mention?.query, clearCloseSubMenuTimeout])
+
+  /** Sync keyboard selection ring with DOM on open and when list geometry changes */
+  useLayoutEffect(() => {
+    if (!mention) return
+    if (hasQuery && flatItems.length === 0) return
+    if (!hasQuery && groups.length === 0) return
+
+    const maxIdx = hasQuery ? flatItems.length - 1 : groups.length - 1
+    selectedRef.current = Math.min(Math.max(0, selectedRef.current), maxIdx)
+    updateHighlight()
+  }, [mention, hasQuery, flatItems.length, groups.length, updateHighlight])
 
   // Clear close timeout on unmount
   useEffect(() => {
     return () => clearCloseSubMenuTimeout()
   }, [clearCloseSubMenuTimeout])
+
+  // Submenu open / category switch: reset sub-cursor to first item
+  useLayoutEffect(() => {
+    if (expandedCategory === null || hasQuery) {
+      prevExpandedCategoryRef.current = null
+      return
+    }
+    const group = groups.find((g) => g.category === expandedCategory)
+    if (!group || group.items.length === 0) return
+
+    const switched = prevExpandedCategoryRef.current !== expandedCategory
+    prevExpandedCategoryRef.current = expandedCategory
+
+    if (switched) {
+      if (openSubmenuAtLastItemRef.current) {
+        openSubmenuAtLastItemRef.current = false
+        const last = Math.max(0, group.items.length - 1)
+        subSelectedRef.current = last
+        setSubSelected(last)
+      } else {
+        subSelectedRef.current = 0
+        setSubSelected(0)
+      }
+    } else {
+      const max = group.items.length - 1
+      if (subSelectedRef.current > max) {
+        subSelectedRef.current = Math.max(0, max)
+        setSubSelected(subSelectedRef.current)
+      }
+    }
+    updateSubMenuHighlight()
+  }, [expandedCategory, hasQuery, groups, updateSubMenuHighlight])
 
   const selectItem = useCallback(
     (item: MentionItem) => {
@@ -175,10 +196,12 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
     return () => document.removeEventListener('mousedown', handleMouseDown, true)
   }, [expandedCategory])
 
-  // Keyboard: when no query, move over categories and Enter opens sub-menu; when query, move over items
+  // Keyboard navigation
   useEffect(() => {
     if (!mention) return
+
     const handler = (e: KeyboardEvent) => {
+      // ── Flat query list ──────────────────────────────────────────────────────
       if (hasQuery) {
         if (flatItems.length === 0) return
         if (e.key === 'ArrowDown') {
@@ -196,55 +219,129 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
             selectItem(flatItems[selectedRef.current])
           }
         }
-      } else {
+        return
+      }
+
+      // ── No query: submenu captures arrows when open ───────────────────────────
+      const expandedGroup =
+        expandedCategory !== null ? groups.find((g) => g.category === expandedCategory) : null
+      const subItems = expandedGroup?.items ?? []
+
+      if (expandedCategory !== null && subItems.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault()
-          selectedRef.current = Math.min(selectedRef.current + 1, groups.length - 1)
-          updateHighlight()
+          if (subSelectedRef.current >= subItems.length - 1) {
+            clearCloseSubMenuTimeout()
+            const nextCatIdx = selectedRef.current + 1
+            if (nextCatIdx < groups.length) {
+              selectedRef.current = nextCatIdx
+              updateHighlight()
+              setExpandedCategory(groups[nextCatIdx].category)
+            } else {
+              setExpandedCategory(null)
+              updateHighlight()
+            }
+          } else {
+            const next = subSelectedRef.current + 1
+            subSelectedRef.current = next
+            setSubSelected(next)
+            updateSubMenuHighlight()
+          }
         } else if (e.key === 'ArrowUp') {
           e.preventDefault()
-          selectedRef.current = Math.max(selectedRef.current - 1, 0)
-          updateHighlight()
+          if (subSelectedRef.current === 0) {
+            clearCloseSubMenuTimeout()
+            setExpandedCategory(null)
+            updateHighlight()
+          } else {
+            const next = subSelectedRef.current - 1
+            subSelectedRef.current = next
+            setSubSelected(next)
+            updateSubMenuHighlight()
+          }
         } else if (e.key === 'Enter' || e.key === 'Tab') {
-          const group = groups[selectedRef.current]
-          if (group) {
+          const item = subItems[subSelectedRef.current]
+          if (item) {
             e.preventDefault()
             e.stopPropagation()
-            setExpandedCategory(group.category)
+            selectItem(item)
           }
-        } else if (e.key === 'Escape') {
-          if (expandedCategory !== null) {
-            e.preventDefault()
-            setExpandedCategory(null)
+        } else if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+          // Close submenu, return to category list
+          e.preventDefault()
+          setExpandedCategory(null)
+        }
+        return
+      }
+
+      // ── Category list ─────────────────────────────────────────────────────────
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        selectedRef.current = Math.min(selectedRef.current + 1, groups.length - 1)
+        updateHighlight()
+        const nextGroup = groups[selectedRef.current]
+        if (nextGroup) {
+          clearCloseSubMenuTimeout()
+          setExpandedCategory(nextGroup.category)
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (selectedRef.current === 0 && groups.length > 0) {
+          clearCloseSubMenuTimeout()
+          const lastCatIdx = groups.length - 1
+          selectedRef.current = lastCatIdx
+          updateHighlight()
+          openSubmenuAtLastItemRef.current = true
+          setExpandedCategory(groups[lastCatIdx].category)
+        } else {
+          selectedRef.current = Math.max(selectedRef.current - 1, 0)
+          updateHighlight()
+          const prevGroup = groups[selectedRef.current]
+          if (prevGroup) {
+            clearCloseSubMenuTimeout()
+            setExpandedCategory(prevGroup.category)
           }
+        }
+      } else if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowRight') {
+        const group = groups[selectedRef.current]
+        if (group && group.items.length > 0) {
+          e.preventDefault()
+          e.stopPropagation()
+          clearCloseSubMenuTimeout()
+          setExpandedCategory(group.category)
         }
       }
     }
-    const updateHighlight = () => {
-      const options = menuRef.current?.querySelectorAll('[role="option"]')
-      options?.forEach((el, i) => {
-        ;(el as HTMLElement).dataset.selected = String(i === selectedRef.current)
-      })
-      options?.[selectedRef.current]?.scrollIntoView({ block: 'nearest' })
-    }
+
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [mention, hasQuery, flatItems, groups, selectItem, expandedCategory])
+  }, [
+    mention,
+    hasQuery,
+    flatItems,
+    groups,
+    selectItem,
+    expandedCategory,
+    updateHighlight,
+    updateSubMenuHighlight,
+    clearCloseSubMenuTimeout,
+  ])
 
-  // No mention, or with query but no matches: hide
   if (!mention) return null
   if (hasQuery && flatItems.length === 0) return null
-  // No query: show only if we have at least one category with items
   if (!hasQuery && groups.length === 0) return null
 
   const { rect } = mention
+  const MAIN_WIDTH = 280
+  const EDGE_PAD = 8
+  const clampedLeft = Math.min(rect.left, window.innerWidth - MAIN_WIDTH - EDGE_PAD)
   const mainStyle: React.CSSProperties = {
-    left: rect.left,
+    left: Math.max(EDGE_PAD, clampedLeft),
     top: rect.top - 6,
     transform: 'translateY(-100%)',
   }
 
-  // No query: only category rows (sub-menus on hover or click)
+  // No query: category rows with expandable sub-menus
   if (!hasQuery) {
     const dropdown = (
       <>
@@ -265,6 +362,8 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
               aria-selected={i === selectedRef.current}
               onMouseEnter={() => {
                 clearCloseSubMenuTimeout()
+                selectedRef.current = i
+                updateHighlight()
                 setExpandedCategory(group.category)
               }}
               onMouseLeave={scheduleCloseSubMenu}
@@ -282,8 +381,37 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
           const group = groups.find((g) => g.category === expandedCategory)
           if (!group || group.items.length === 0) return null
           const subRect = menuRef.current?.getBoundingClientRect()
-          const subLeft = subRect ? subRect.right + 4 : rect.left + 224
-          const subTop = subRect ? subRect.top : rect.top - 6
+          // Get the bounding rect of the currently active category row so the
+          // submenu centers on that specific row rather than the whole menu.
+          const activeRowEl = menuRef.current?.querySelectorAll('[role="option"]')[selectedRef.current] as HTMLElement | undefined
+          const rowRect = activeRowEl?.getBoundingClientRect()
+          const SUB_WIDTH = 220
+          const EDGE_PAD_INNER = 8
+          const vw = window.innerWidth
+          const vh = window.innerHeight
+          let subLeft: number
+          let subTop: number
+          if (subRect) {
+            const rightOverflow = subRect.right + 8 + SUB_WIDTH > vw - EDGE_PAD_INNER
+            subLeft = rightOverflow
+              ? Math.max(EDGE_PAD_INNER, subRect.left - 8 - SUB_WIDTH)
+              : subRect.right + 8
+            const estimatedSubHeight = Math.min(
+              group.items.length * 30 + 10,
+              SUBMENU_MAX_HEIGHT_PX,
+            )
+            // Center submenu on the hovered row so every category — including
+            // "Docs" at the bottom — aligns naturally to its own row.
+            const rowMidY = rowRect
+              ? rowRect.top + rowRect.height / 2
+              : subRect.top + subRect.height / 2
+            const centeredTop = rowMidY - estimatedSubHeight / 2
+            subTop = Math.min(centeredTop, vh - estimatedSubHeight - EDGE_PAD_INNER)
+            subTop = Math.max(EDGE_PAD_INNER, subTop)
+          } else {
+            subLeft = rect.left + 224
+            subTop = rect.top - 6
+          }
           return createPortal(
             <div
               ref={subMenuRef}
@@ -294,21 +422,18 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
               onMouseEnter={clearCloseSubMenuTimeout}
               onMouseLeave={scheduleCloseSubMenu}
             >
-              {group.items.map((item, _i) => (
+              {group.items.map((item, i) => (
                 <div
                   key={item.id}
                   className={styles.option}
                   role="option"
+                  data-selected={String(i === subSelected)}
+                  aria-selected={i === subSelected}
                   onMouseDown={(e) => {
                     e.preventDefault()
                     selectItem(item)
                   }}
                 >
-                  {(item.category === 'collaborator' || item.category === 'object') && (
-                    <span className={styles.icon}>
-                      <ItemIcon item={item} />
-                    </span>
-                  )}
                   <span className={styles.label}>{item.label}</span>
                 </div>
               ))}
@@ -321,7 +446,7 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
     return createPortal(dropdown, document.body)
   }
 
-  // Has query: categories with items inline (current behavior)
+  // Has query: flat grouped list
   let flatIdx = 0
   const dropdown = (
     <div
@@ -351,9 +476,6 @@ export function MentionDropdown({ mention, items, pillInputRef, onClose }: Menti
                   selectItem(item)
                 }}
               >
-                <span className={styles.icon}>
-                  <ItemIcon item={item} />
-                </span>
                 <span className={styles.label}>{item.label}</span>
               </div>
             )

@@ -67,7 +67,7 @@
 
 .actionIconContainer:active,
 .actionIconContainer.pressed {
-  background: rgba(208, 217, 251, 0.12);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .menuDropdown {
@@ -91,6 +91,7 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--content-muted);
+  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
@@ -145,17 +146,6 @@
   background: var(--bg-surface300);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  overflow: hidden;
-}
-
-.logoIcon img {
-  width: 32px;
-  height: 32px;
-  display: block;
-  border-radius: inherit;
-  object-fit: cover;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 .logoText {
@@ -172,7 +162,7 @@
   display: flex;
   flex-flow: row;
   align-items: center;
-  gap: 4px;
+  gap: 0px;
   padding: 0px;
   height: 28px;
   width: fit-content;
@@ -181,7 +171,6 @@
   border: none;
   justify-content: center;
   box-sizing: content-box;
-  position: relative;
 }
 
 .avatar {
@@ -338,14 +327,6 @@
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
   cursor: pointer;
-  outline: none;
-}
-
-.testPlayButton:focus,
-.testPauseButton:focus,
-.testStopButton:focus {
-  outline: none;
-  box-shadow: none;
 }
 
 .testPlayButton {
@@ -367,21 +348,10 @@
 }
 
 .testStopButton {
-  color: var(--color-error, #e74c3c);
+  color: var(--content-default);
 }
 
-.testStopButton:disabled {
-  color: var(--content-muted);
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.testStopButton:disabled:hover {
-  background: transparent;
-  color: var(--content-muted);
-}
-
-.testStopButton:not(:disabled):hover {
+.testStopButton:hover {
   background: var(--content-hover);
   color: var(--content-emphasis);
 }
@@ -546,419 +516,51 @@
   color: var(--content-muted);
 }
 
-/* Active toolbar icon (e.g., AI Assistant toggle) – same pressed look as aiSettingsWrap; override .group > div */
-.group > div.activeToolbarIcon {
-  width: 24px;
-  height: 24px;
-  background: rgba(208, 217, 251, 0.12);
+/* Settings dropdown anchor (mirrors Ribbon settingsWrap) */
+.settingsWrap {
+  position: relative;
+}
+
+/* Active toolbar icon (e.g., AI Assistant toggle) */
+.activeToolbarIcon {
+  background: rgba(208, 217, 251, 0.16);
   border-radius: var(--radius-sm);
 }
 
-.toolbarIconPair {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 4px;
-  height: 28px;
-  width: fit-content;
-  border-radius: 32px;
-}
-
-/* Override .group > div so our toolbarIconPair and nested icon sizes are retained */
-.group > div.toolbarIconPair {
-  width: fit-content;
-  height: 28px;
-}
-
-/* Pressed state keeps rounded shape but no background fill */
-.toolbarIconPair:active,
-.toolbarIconPairPressed {
-  background: transparent;
-  border-radius: 32px;
-}
-
-/* When assistant is open, keep shape but no background fill */
-.group > div.toolbarIconPair.toolbarIconPairPressed {
-  background: transparent;
-  border-radius: 32px;
-}
-
-/* Fixed-size icon slot in pair so the AI Assistant icon does not move on press or toggle */
-.toolbarIconPairIcon {
-  width: 24px;
-  height: 24px;
+.groupIconButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-/* Nested active icon (e.g. AI Assistant inside Background processes pair) – persist 24px */
-.toolbarIconPair .activeToolbarIcon {
-  width: 24px;
-  height: 24px;
-}
-
-.toolbarIconPair > div {
-  cursor: pointer;
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.toolbarIconPair > div:active {
-  outline: none;
-}
-
-.toolbarIconPair img {
-  padding: 0;
-  display: block;
-}
-
-/* Nebula icon pulses when AI assistant is generating */
-.nebulaPulsing img {
-  animation: nebulaPulse 2s ease-in-out infinite;
-  transform-origin: center;
-}
-
-@keyframes nebulaPulse {
-  0%, 100% { filter: drop-shadow(0 0 2px rgba(82, 139, 255, 0.2)); }
-  50% { filter: drop-shadow(0 0 8px rgba(82, 139, 255, 0.6)); }
-}
-
-@keyframes nebulaRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.drawerToolbarIcon {
-  position: relative;
-  min-width: 28px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-
-/* Drawer icon hidden by default; when nebula is selected, slides in from the right (out of the nebula) */
-.drawerToolbarIcon img {
-  opacity: 0;
-  transform: translateX(24px);
-  pointer-events: none;
-  transition: opacity 0.2s ease-out, transform 0.25s ease-out;
-  /* Force icon to render white (handles dark SVG or themed asset) */
-  filter: brightness(0) invert(1);
-}
-
-.toolbarIconPairPressed .drawerToolbarIcon img,
-.drawerIconRevealed .drawerToolbarIcon img {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
-.drawerBadge {
-  position: static;
-  min-width: auto;
-  height: auto;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--content-emphasis);
-  background: transparent;
-  border-radius: 0;
-  box-sizing: content-box;
-}
-
-.drawerBadgeCount {
-  display: inline-block;
-}
-
-.drawerApprovalDot {
-  position: absolute;
-  top: 1px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-warning);
-  flex-shrink: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.drawerIconSpinner {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  display: block;
-  animation: drawerSpin 0.6s linear infinite;
-}
-
-@keyframes drawerSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Wrapper for AI settings button + dropdown so menu anchors under the button */
-.group > div.aiSettingsWrap {
-  position: relative;
-  width: 24px;
-  height: 24px;
-}
-
-.group > div.aiSettingsWrap.pressed {
-  background: rgba(208, 217, 251, 0.12);
-  border-radius: var(--radius-sm);
-}
-
-.aiSettingsWrap > button {
-  height: 18px;
-}
-
-.aiSettingsDropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 200px;
-  background: var(--bg-surface200);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  padding: 4px;
-  z-index: 1000;
-}
-
-/* Tasks menu (drawer icon dropdown) */
-.tasksMenuDropdown {
-  min-width: 240px;
-  max-width: 320px;
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.tasksMenuHeader {
-  padding: 8px 12px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--content-muted);
-  letter-spacing: 0.5px;
-}
-
-.tasksMenuApprovalBanner {
-  display: flex;
-  align-items: center;
-  gap: 4px;
   width: 100%;
+  height: 100%;
+  padding: 0;
   margin: 0;
-  padding: 8px 12px 6px;
   border: none;
-  border-radius: 0;
-  background: transparent;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--content-muted);
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-
-.tasksMenuApprovalBanner:hover {
-  background: var(--content-hover);
-}
-
-.tasksMenuApprovalBannerChevron {
-  flex-shrink: 0;
-  color: var(--content-muted);
-}
-
-.tasksMenuOpenChatRow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - 16px);
-  margin: 0 8px 8px;
-  margin-left: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface100);
-}
-
-.tasksMenuOpenChatTitle {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--content-emphasis);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 1;
-  text-align: left;
-}
-
-.tasksMenuOpenChatAction {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--content-emphasis);
-  background: var(--content-pressed);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.tasksMenuOpenChatAction:hover {
-  background: var(--content-hover);
-}
-
-.tasksMenuOpenChatAction:active {
-  background: var(--content-pressed);
-}
-
-.tasksMenuEmpty {
-  padding: 12px;
-  font-size: 13px;
-  color: var(--content-muted);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tasksMenuEmptySpinner {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  animation: drawerSpin 0.6s linear infinite;
-  color: var(--content-muted);
-}
-
-.tasksMenuList {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-}
-
-.tasksMenuItem {
-  padding: 8px 12px;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tasksMenuItem:hover {
-  background: var(--content-hover);
-}
-
-.tasksMenuLabelWrap {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.tasksMenuLabel {
-  font-size: 13px;
+  background: transparent;
   color: var(--content-default);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tasksMenuStatus {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--content-muted);
-  text-transform: capitalize;
-}
-
-.tasksMenuStatusIcon {
-  flex-shrink: 0;
-  color: inherit;
-}
-
-.tasksMenuStatusError {
-  color: var(--color-error, #df281f);
-}
-
-.tasksMenuStatusError .tasksMenuStatusIcon {
-  color: var(--color-error, #df281f);
-}
-
-.tasksMenuStatusDone .tasksMenuStatusIcon {
-  color: var(--color-success, #39c582);
-}
-
-.tasksMenuError {
-  display: block;
-  font-size: 11px;
-  color: var(--color-error, #df281f);
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.tasksMenuActions {
-  display: flex;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.tasksMenuActionBtn {
-  padding: 2px 8px;
-  font-size: 11px;
-  color: var(--content-link);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.tasksMenuActionBtn:hover {
+.groupIconButton:hover {
+  background: rgba(255, 255, 255, 0.12);
   color: var(--content-emphasis);
-  background: var(--content-hover);
 }
 
-/* Group wrapper divs and icon buttons */
-.group > div,
-.group > button {
+/* Group wrapper divs for icon containers */
+.group > div {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 28px;
   height: 28px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-}
-
-.group > button:hover {
-  background: rgba(208, 217, 251, 0.12);
 }
 
 /* Images within group */
 .group img {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   padding: 4px;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
@@ -1043,67 +645,5 @@
 
 .continueLink:hover {
   color: var(--content-link);
-}
-
-/* Hotkey command list dropdown */
-.hotkeyDropdown {
-  min-width: 260px;
-  max-height: 420px;
-  overflow-y: auto;
-  right: 0;
-  left: auto;
-}
-
-.hotkeyHeader {
-  padding: 8px 12px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--content-muted);
-  letter-spacing: 0.5px;
-}
-
-.hotkeySection {
-  padding: 4px 0;
-}
-
-.hotkeySection + .hotkeySection {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.hotkeySectionLabel {
-  padding: 6px 12px 4px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--content-muted);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.hotkeyRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 5px 12px;
-}
-
-.hotkeyLabel {
-  font-size: 12px;
-  color: var(--content-default);
-  white-space: nowrap;
-}
-
-.hotkeyKbd {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--content-muted);
-  background: rgba(208, 217, 251, 0.08);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 1px 6px;
-  min-width: 20px;
-  text-align: center;
-  white-space: nowrap;
 }
 

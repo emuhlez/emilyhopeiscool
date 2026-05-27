@@ -1,5 +1,4 @@
 import { useEditorStore } from '../../store/editorStore'
-import { useDockingStore } from '../../store/dockingStore'
 import type { GameObject } from '../../types'
 
 export interface AddObjectArgs {
@@ -22,7 +21,6 @@ export function executeAddObject(args: AddObjectArgs): { id: string; name: strin
     throw new Error('No workspace found — cannot add object to scene')
   }
 
-  // Build all updates upfront
   const updates: Partial<GameObject> = {
     primitiveType: args.primitive as GameObject['primitiveType'],
   }
@@ -37,38 +35,13 @@ export function executeAddObject(args: AddObjectArgs): { id: string; name: strin
     scale: { x: sx, y: sy, z: sz },
   }
 
-  if (args.color) {
-    updates.color = args.color
-  }
+  if (args.color) updates.color = args.color
+  if (args.metalness !== undefined) updates.reflectance = args.metalness
+  if (args.roughness !== undefined) updates.roughness = args.roughness
 
-  if (args.metalness !== undefined) {
-    updates.reflectance = args.metalness
-  }
-
-  if (args.roughness !== undefined) {
-    updates.roughness = args.roughness
-  }
-
-  // Single batched store update: create + configure + select + creation effect
-  const id = store.createAndConfigureObject(
-    'mesh',
-    args.name,
-    workspaceId,
-    updates,
-    { x: px, y: py, z: pz },
-  )
-
-  // Open Properties panel and request viewport focus (deferred, no store churn)
-  useDockingStore.getState().setInspectorBodyCollapsed(false)
-  setTimeout(() => {
-    useEditorStore.getState().setRequestFocusSelection(true)
-  }, 150)
-
+  const id = store.createAndConfigureObject('mesh', args.name, workspaceId, updates)
+  store.selectObject(id)
   store.log(`AI: Created "${args.name}" (${args.primitive})`, 'info', 'AI Agent')
-
-  // Brief orange working highlight (Gap 3)
-  useEditorStore.getState().addAIWorkingObject(id)
-  setTimeout(() => useEditorStore.getState().removeAIWorkingObject(id), 2000)
 
   return { id, name: args.name }
 }

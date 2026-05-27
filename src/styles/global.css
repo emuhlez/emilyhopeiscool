@@ -1,5 +1,84 @@
-/* @font-face rules are injected dynamically by src/utils/loadFonts.ts
-   so that font URLs resolve correctly with the app's base path. */
+/* BuilderSans Font Family */
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-ExtraBold.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* BuilderMono Font Family */
+@font-face {
+  font-family: 'BuilderMono';
+  src: url('/fonts/builder-mono/BuilderMono-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderMono';
+  src: url('/fonts/builder-mono/BuilderMono-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderMono';
+  src: url('/fonts/builder-mono/BuilderMono-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   /* Surface colors */
@@ -20,8 +99,8 @@
   --content-default: #D5D7DD;
   --content-muted: #BCBEC8;
   --content-link: #528BFF;
-  --content-hover: rgba(208, 217, 251, 0.04);
-  --content-selected: rgba(208, 217, 251, 0.08);
+  --content-hover: rgba(208, 217, 251, 0.08);
+  /** Stronger surface tint for pressed / toggled control backgrounds (ribbon, segmented controls) */
   --content-pressed: rgba(208, 217, 251, 0.12);
   
   /* Semantic colors */
@@ -69,10 +148,7 @@
 
 html, body, #root {
   height: 100%;
-  width: 100%;
-  max-width: 100vw;
   overflow: hidden;
-  overflow-x: hidden;
 }
 
 body {
@@ -125,10 +201,6 @@ button {
   background: none;
   cursor: pointer;
   color: inherit;
-}
-
-button:focus-visible {
-  outline: none;
 }
 
 button:disabled {

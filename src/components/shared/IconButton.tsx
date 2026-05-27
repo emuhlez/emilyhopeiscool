@@ -37,13 +37,15 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       <button
         ref={ref}
         data-component="IconButton"
-        className={`
-          ${styles.button} 
-          ${styles[size]} 
-          ${styles[variant]}
-          ${active ? styles.active : ''} 
-          ${className || ''}
-        `}
+        className={[
+          styles.button,
+          styles[size],
+          variant !== 'default' ? styles[variant] : '',
+          active ? styles.active : '',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
         title={tooltip}
         onClick={handleClick}
         {...props}

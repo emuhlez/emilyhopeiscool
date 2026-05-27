@@ -10,7 +10,7 @@ export interface Transform {
   scale: Vector3
 }
 
-export type GameObjectType =
+export type GameObjectType = 
   | 'empty'
   | 'mesh'
   | 'light'
@@ -137,17 +137,23 @@ export interface EditorState {
   selectedAssetIds: string[]
   selectedAssetAnchor: string | null
   viewportSelectedAssetNames: string[]
-  /** Screen position for contextual AI input placement (relative to viewport) */
-  aiInputAnchorPosition: { x: number; y: number } | null
   isPlaying: boolean
   isPaused: boolean
-  activeTool: 'select' | 'move' | 'rotate' | 'scale' | 'transform' | 'pen' | null
-  /** When activeTool is 'select', which selection mode to use */
-  selectMode: 'single' | 'box'
+  activeTool: 'select' | 'move' | 'rotate' | 'scale'
   viewMode: '2d' | '3d'
   showGrid: boolean
   snapToGrid: boolean
   gridSize: number
+}
+
+export type DockZone = 'left' | 'center-top' | 'center-bottom' | 'right-top' | 'right-bottom'
+
+export interface DockedWidget {
+  id: string
+  zone: DockZone
+  order: number
+  /** Sticky position on viewport (px from top-left of viewport area). When set, widget is placed here instead of a zone. */
+  position?: { x: number; y: number }
 }
 
 // --- Conversation types ---
@@ -233,20 +239,10 @@ export type ExecutionMode = 'one-shot' | 'step-by-step'
 
 export type StepStatus = 'pending' | 'executing' | 'done' | 'error'
 
-export type DockZone = 'left' | 'center-top' | 'center-bottom' | 'right-top' | 'right-bottom'
-
-export interface DockedWidget {
-  id: string
-  zone: DockZone
-  order: number
-  /** Sticky position on viewport (px from top-left of viewport area). When set, widget is placed here instead of a zone. */
-  position?: { x: number; y: number }
-}
-
 // --- PillInput types ---
 
 /** Kind of pill for flexible tagging: scene objects, assets, asset types, collaborators, etc. */
-export type PillKind = 'object' | 'asset' | 'assetType' | 'collaborator' | 'tool' | 'command'
+export type PillKind = 'object' | 'asset' | 'assetType' | 'collaborator' | 'tool' | 'command' | 'script' | 'folder' | 'active-tab' | 'doc' | 'readme' | 'plan'
 
 export type InputSegment =
   | { type: 'text'; text: string }
@@ -271,6 +267,8 @@ export interface PillInputHandle {
   focus: () => void
   getTextContent: () => string
 }
+
+// --- Background task types ---
 
 export type BackgroundTaskStatus = 'pending' | 'running' | 'done' | 'error'
 

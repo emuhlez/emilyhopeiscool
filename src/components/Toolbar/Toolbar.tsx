@@ -2,93 +2,42 @@ import {
   Play,
   Square,
   X,
-  Settings,
-  Loader2,
-  Check,
-  AlertCircle,
-  Clock,
-  ChevronDown,
-  ChevronRight,
-  Menu,
-  Pause,
+  Sparkles,
+  Cog,
 } from 'lucide-react'
 import { ExpandDownIcon } from '../shared/ExpandIcons'
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import type { DockZone } from '../../types'
 import { useEditorStore } from '../../store/editorStore'
 import { useDockingStore } from '../../store/dockingStore'
-import { useBackgroundTaskStore } from '../../store/backgroundTaskStore'
-import { usePlanStore } from '../../store/planStore'
-import { useConversationStore } from '../../store/conversationStore'
 import { MenuDropdown, MenuItem } from '../shared/MenuDropdown'
+import { useAgentChat } from '../../ai/use-agent-chat'
 import { isAIIntent } from '../../ai/detect-ai-intent'
-import { stripLeadingBrackets, truncateTitle } from '../../ai/strip-brackets'
-import type { Asset } from '../../types'
-import { publicUrl } from '../../utils/assetUrl'
+import { parseResponse } from '../../ai/parse-response'
+import { SettingsPanel } from '../SettingsPanel/SettingsPanel'
 import styles from './Toolbar.module.css'
-import aiAssistantIcon from '../../../icons/nebula.svg'
-import keyCommandIcon from '../../../icons/key-command.svg'
-import boilerplateIcon from '../../../icons/boiler plate.png'
+import searchIconImg from '../../../images/search.png'
+import annotationIcon from '../../../images/Annotation Icon.png'
+import notificationIcon from '../../../images/Small_Notification.png'
+import avatar1 from '../../../images/Avatar-1.png'
+import avatar2 from '../../../images/Avatar-2.png'
+import avatar3 from '../../../images/Avatar-3.png'
 import partBlockIcon from '../../../images/Part_Block.png'
 
 export function Toolbar() {
   const [showTestDropdown, setShowTestDropdown] = useState(false)
   const [menuPressed, setMenuPressed] = useState(false)
-  const [menuIconFailed, setMenuIconFailed] = useState(false)
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
   const [selectedTestMode, setSelectedTestMode] = useState('Test')
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [aiResponseText, setAiResponseText] = useState<string | null>(null)
   const [aiSubmitted, setAiSubmitted] = useState(false)
-  const [showTasksMenu, setShowTasksMenu] = useState(false)
-  const [showHotkeyList, setShowHotkeyList] = useState(false)
-  const [approvalSectionExpanded, setApprovalSectionExpanded] = useState(true)
-  const omnisearchMode = useDockingStore((s) => s.omnisearchMode)
-  const settingsPanelOpen = useDockingStore((s) => s.settingsPanelOpen)
-  const toggleSettingsPanel = useDockingStore((s) => s.toggleSettingsPanel)
-  const chatbotUIMode = useDockingStore((s) => s.chatbotUIMode)
-  const viewportAIInputOpen = useDockingStore((s) => s.viewportAIInputOpen)
-  const widgets = useDockingStore((s) => s.widgets)
-  const aiAssistantBodyCollapsed = useDockingStore((s) => s.aiAssistantBodyCollapsed)
   const aiDismissTimer = useRef<ReturnType<typeof setTimeout>>()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
-  const tasksMenuRef = useRef<HTMLDivElement>(null)
-  const tasksMenuDropdownRef = useRef<HTMLDivElement>(null)
-  const hotkeyRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const backgroundTasks = useBackgroundTaskStore((s) => s.tasks)
-  const backgroundTaskCount = backgroundTasks.length
-  const activePlan = usePlanStore((s) => s.activePlan)
-  const hasPlanPendingApproval = activePlan?.status === 'pending' || activePlan?.status === 'clarifying'
-  const activeConversationId = useConversationStore((s) => s.activeConversationId)
-  const conversations = useConversationStore((s) => s.conversations)
-  const activeConversation = activeConversationId ? conversations[activeConversationId] : null
-  const inProgressCount = useMemo(
-    () => backgroundTasks.filter((t) => t.status === 'running').length,
-    [backgroundTasks]
-  )
-  /** When queue mode is enabled: show drawer icon persistently in toolbar */
-  const drawerIconPersistent = chatbotUIMode === 'queue' || chatbotUIMode === 'sidenav'
-
-  // Keep tasks menu dropdown within viewport
-  const [tasksMenuPosition, setTasksMenuPosition] = useState<{ left: number; top: number } | null>(null)
-  useLayoutEffect(() => {
-    if (!showTasksMenu || !tasksMenuRef.current || !tasksMenuDropdownRef.current) {
-      setTasksMenuPosition(null)
-      return
-    }
-    const triggerRect = tasksMenuRef.current.getBoundingClientRect()
-    const dropdownEl = tasksMenuDropdownRef.current
-    const width = dropdownEl.offsetWidth || 240
-    const margin = 8
-    const top = triggerRect.bottom + 4
-    let left = triggerRect.left
-    if (left < margin) left = margin
-    if (left + width > window.innerWidth - margin) left = window.innerWidth - width - margin
-    setTasksMenuPosition({ left, top })
-  }, [showTasksMenu, backgroundTasks.length])
 
   // Test dropdown menu items
   const testMenuItems: MenuItem[] = [
@@ -97,6 +46,8 @@ export function Toolbar() {
     { label: 'Run', onClick: () => setSelectedTestMode('Run') },
     { label: 'Server & Clients', onClick: () => setSelectedTestMode('Server & Clients') },
   ]
+  
+  // Menu items without dividers for this variant
   const menuItems: MenuItem[] = [
     { 
       label: 'File',
@@ -226,7 +177,7 @@ export function Toolbar() {
       submenu: [
         { label: 'Toolbox', onClick: () => console.log('Toolbox') },
         { label: 'Properties', onClick: () => console.log('Properties') },
-        { label: 'Explorer', shortcut: '⌃ X', onClick: () => { dockWidget('explorer', 'left'); useDockingStore.getState().setLeftCollapsed(false) } },
+        { label: 'Explorer', shortcut: '⌃ X', onClick: () => console.log('Explorer') },
         { label: 'Output', onClick: () => console.log('Output') },
         { label: 'Activity History', onClick: () => console.log('Activity History') },
         { label: 'Asset Manager', onClick: () => console.log('Asset Manager') },
@@ -255,58 +206,102 @@ export function Toolbar() {
     play,
     pause,
     stop,
-    isPlaying,
-    assets,
-    aiGenerating,
   } = useEditorStore()
 
-  const { dockWidget, undockWidget } = useDockingStore()
-  const setAiAssistantBodyCollapsed = useDockingStore((s) => s.setAiAssistantBodyCollapsed)
-  const aiPanelVisible = !!widgets['ai-assistant'] && !aiAssistantBodyCollapsed
-  const dismissTask = useBackgroundTaskStore((s) => s.dismissTask)
-  const promoteToConversation = useBackgroundTaskStore((s) => s.promoteToConversation)
+  const dockWidget = useDockingStore((s) => s.dockWidget)
+  const undockWidget = useDockingStore((s) => s.undockWidget)
+  const settingsPanelOpen = useDockingStore((s) => s.settingsPanelOpen)
+  const toggleSettingsPanel = useDockingStore((s) => s.toggleSettingsPanel)
+  const aiAssistant = useDockingStore((s) => s.widgets['ai-assistant'])
+  const aiPanelVisible = !!aiAssistant
+  const lastAIZoneRef = useRef<DockZone>('left')
 
   const toggleAIPanel = () => {
     if (aiPanelVisible) {
+      lastAIZoneRef.current = aiAssistant?.zone ?? 'left'
       undockWidget('ai-assistant')
     } else {
-      dockWidget('ai-assistant', 'right-top')
-      if (backgroundTaskCount > 0) {
-        setAiAssistantBodyCollapsed(false)
-      }
+      dockWidget('ai-assistant', lastAIZoneRef.current)
     }
   }
 
-  // Background task runner now lives in App.tsx so the AI panel doesn't need
-  // to be auto-docked for tasks to process.
-
+  // AI chat integration for omnisearch
+  const { messages, sendMessage, status: aiStatus } = useAgentChat()
+  const aiIsLoading = aiStatus === 'streaming' || aiStatus === 'submitted'
   const aiMode = isAIIntent(searchQuery)
-  const aiIsLoading = backgroundTasks.some((t) => t.status === 'running')
-  const aiPendingToolCount = 0
-  const enqueueTask = useBackgroundTaskStore((s) => s.enqueueTask)
+
+  // Count pending tool calls for AI status
+  const aiPendingToolCount = messages
+    .filter((m) => m.role === 'assistant')
+    .flatMap((m) => m.parts ?? [])
+    .filter((part) => {
+      if (part.type === 'text') return false
+      if ('state' in part) {
+        return part.state === 'input-streaming' || part.state === 'input-available'
+      }
+      return false
+    }).length
+
+  // Watch for AI status transition to 'ready' after submitting
+  const prevAiStatusRef = useRef(aiStatus)
+  useEffect(() => {
+    const wasLoading = prevAiStatusRef.current === 'streaming' || prevAiStatusRef.current === 'submitted'
+    prevAiStatusRef.current = aiStatus
+
+    if (!aiSubmitted) return
+    if (!wasLoading || aiStatus !== 'ready') return
+
+    // Status just went from loading → ready; read the final response
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    if (!lastAssistant) return
+
+    const text = lastAssistant.parts
+      ?.filter((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text')
+      .map((p) => p.text)
+      .join('') || ''
+
+    if (!text) {
+      setAiSubmitted(false)
+      return
+    }
+
+    const parsed = parseResponse(text)
+    setAiSubmitted(false)
+
+    if (parsed.shouldOpenAssistant) {
+      dockWidget('ai-assistant', lastAIZoneRef.current)
+      setShowSearchResults(false)
+      setSearchQuery('')
+      setAiResponseText(null)
+      return
+    }
+
+    const display = parsed.text.length > 150
+      ? parsed.text.slice(0, 150) + '...'
+      : parsed.text
+    setAiResponseText(display)
+
+    clearTimeout(aiDismissTimer.current)
+    aiDismissTimer.current = setTimeout(() => {
+      setAiResponseText(null)
+      setShowSearchResults(false)
+      setSearchQuery('')
+    }, 4000)
+  }, [aiStatus, messages, aiSubmitted, dockWidget])
 
   // Cleanup AI dismiss timer
   useEffect(() => {
     return () => clearTimeout(aiDismissTimer.current)
   }, [])
 
-  // Handle AI search submit — route through keyword engine via background task store
+  // Handle AI search submit
   const handleAISubmit = useCallback(() => {
     if (!searchQuery.trim() || aiIsLoading) return
-    enqueueTask(searchQuery)
+    sendMessage({ text: searchQuery })
     setAiSubmitted(true)
-    setAiResponseText('Processing...')
+    setAiResponseText(null)
     setShowSearchResults(true)
-
-    // Auto-dismiss after brief delay since keyword engine is synchronous
-    clearTimeout(aiDismissTimer.current)
-    aiDismissTimer.current = setTimeout(() => {
-      setAiResponseText(null)
-      setAiSubmitted(false)
-      setShowSearchResults(false)
-      setSearchQuery('')
-    }, 2000)
-  }, [searchQuery, aiIsLoading, enqueueTask])
+  }, [searchQuery, aiIsLoading, sendMessage])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -321,19 +316,13 @@ export function Toolbar() {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowSearchResults(false)
       }
-      if (tasksMenuRef.current && !tasksMenuRef.current.contains(event.target as Node)) {
-        setShowTasksMenu(false)
-      }
-      if (hotkeyRef.current && !hotkeyRef.current.contains(event.target as Node)) {
-        setShowHotkeyList(false)
-      }
     }
 
-    if (showTestDropdown || showMenuDropdown || showSearchResults || showTasksMenu || showHotkeyList) {
+    if (showTestDropdown || showMenuDropdown || showSearchResults) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showTestDropdown, showMenuDropdown, showSearchResults, showTasksMenu, showHotkeyList])
+  }, [showTestDropdown, showMenuDropdown, showSearchResults])
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -370,43 +359,15 @@ export function Toolbar() {
     clearTimeout(aiDismissTimer.current)
   }
 
-  // Flatten all assets (including folders and nested children) for global search
-  const flattenedAssets = useMemo(() => {
-    const all: { type: string; name: string; path: string }[] = []
-
-    const walk = (list: Asset[], parentPath = '') => {
-      list.forEach((asset) => {
-        const displayPath = asset.path || (parentPath ? `${parentPath}/${asset.name}` : asset.name)
-        all.push({
-          type:
-            asset.type === 'folder'
-              ? 'Folder'
-              : asset.type.charAt(0).toUpperCase() + asset.type.slice(1),
-          name: asset.name,
-          path: displayPath,
-        })
-
-        if (asset.children?.length) {
-          walk(asset.children, displayPath)
-        }
-      })
-    }
-
-    walk(assets)
-    return all
-  }, [assets])
-
-  const searchResults =
-    searchQuery.length > 0
-      ? flattenedAssets.filter((item) => {
-          const q = searchQuery.toLowerCase()
-          return (
-            item.name.toLowerCase().includes(q) ||
-            item.type.toLowerCase().includes(q) ||
-            item.path.toLowerCase().includes(q)
-          )
-        })
-      : []
+  // Mock search results - replace with actual search logic
+  const searchResults = searchQuery.length > 0 ? [
+    { type: 'Script', name: 'PlayerController', path: 'Workspace > Scripts' },
+    { type: 'Part', name: 'Platform', path: 'Workspace > Models' },
+    { type: 'Model', name: 'PlayerModel', path: 'Workspace' },
+  ].filter(item => 
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.type.toLowerCase().includes(searchQuery.toLowerCase())
+  ) : []
 
   return (
     <header className={styles.toolbar}>
@@ -425,16 +386,7 @@ export function Toolbar() {
           }}
           ref={menuRef}
         >
-          {menuIconFailed ? (
-            <Menu size={24} className={styles.actionIcon} aria-hidden />
-          ) : (
-            <img
-              src={publicUrl('roblox_dropdown.png')}
-              alt="Menu"
-              className={styles.actionIcon}
-              onError={() => setMenuIconFailed(true)}
-            />
-          )}
+          <img src="/roblox_dropdown.png" alt="Menu" className={styles.actionIcon} />
           <MenuDropdown
             items={menuItems}
             isOpen={showMenuDropdown}
@@ -448,10 +400,8 @@ export function Toolbar() {
         <div className={styles.divider} />
 
         <div className={styles.logo}>
-          <div className={styles.logoIcon}>
-            <img src={boilerplateIcon} alt="Studio Shell" />
-          </div>
-          <span className={styles.logoText}>boilerplate</span>
+          <div className={styles.logoIcon}></div>
+          <span className={styles.logoText}>crossy farm</span>
         </div>
 
         <div className={styles.divider} />
@@ -469,22 +419,13 @@ export function Toolbar() {
             isOpen={showTestDropdown}
             onClose={() => setShowTestDropdown(false)}
           />
-          <button
-            className={isPlaying ? styles.testStopButton : styles.testPlayButton}
-            onClick={isPlaying ? stop : play}
-            title={isPlaying ? 'Stop — Exit game mode' : 'Play — Enter game mode'}
-          >
-            {isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+          <button className={styles.testPlayButton} onClick={play} title="Play Test">
+            <Play size={16} fill="currentColor" />
           </button>
           <button className={styles.testPauseButton} onClick={pause} title="Pause Test">
-            <Pause size={16} fill="currentColor" aria-hidden />
+            <img src="/pause-split-toggle.png" alt="Pause" width={16} height={16} />
           </button>
-          <button
-            className={styles.testStopButton}
-            onClick={stop}
-            title="Stop — Exit game mode"
-            disabled={!isPlaying}
-          >
+          <button className={styles.testStopButton} onClick={stop} title="Stop Test">
             <Square size={16} fill="currentColor" />
           </button>
         </div>
@@ -492,15 +433,14 @@ export function Toolbar() {
 
       <div className={styles.searchWrapper} ref={searchRef}>
         <div className={styles.searchContainer}>
-          {searchQuery.trim() && !aiMode && (
-            <span className={styles.aiIndicator}>AI</span>
-          )}
+          <img src={searchIconImg} alt="Search" className={styles.searchIcon} width={16} height={16} />
+          {aiMode && <span className={styles.aiIndicator}>AI</span>}
           <input
             ref={searchInputRef}
             type="text"
-            placeholder={omnisearchMode === 'primary-assistant' ? 'What do you want to build?' : 'Search or ask'}
+            placeholder="Search Project"
             className={styles.searchInput}
-            aria-label={omnisearchMode === 'primary-assistant' ? 'What do you want to build?' : 'Search or ask'}
+            aria-label="Search Project"
             value={searchQuery}
             onChange={handleSearchChange}
             onKeyDown={handleSearchKeyDown}
@@ -518,68 +458,14 @@ export function Toolbar() {
         </div>
         {showSearchResults && (
           <div className={styles.searchResultsMenu}>
-            {omnisearchMode === 'primary-search' ? (
-              <>
-                {(aiMode || aiSubmitted) && (
-                  <div className={styles.aiResponse}>
-                    {aiIsLoading && (
-                      <div className={styles.aiResponseStatus}>
-                        <span className={styles.aiStatusDot} />
-                        <span>
-                          {aiPendingToolCount > 0
-                            ? `Executing ${aiPendingToolCount} tool${aiPendingToolCount > 1 ? 's' : ''}...`
-                            : 'Thinking...'}
-                        </span>
-                      </div>
-                    )}
-                    {aiResponseText && (
-                      <div className={styles.aiResponseText}>{aiResponseText}</div>
-                    )}
-                    {!aiIsLoading && !aiResponseText && !aiSubmitted && (
-                      <div className={styles.aiResponseHint}>Press Enter to ask AI</div>
-                    )}
-                    <button
-                      className={styles.continueLink}
-                      onClick={() => {
-                        dockWidget('ai-assistant', 'right-top')
-                        setShowSearchResults(false)
-                      }}
-                    >
-                      Continue in Assistant →
-                    </button>
-                  </div>
-                )}
-                {searchResults.length > 0 ? (
-                  searchResults.map((result, index) => (
-                    <button
-                      key={index}
-                      className={styles.searchResultItem}
-                      onClick={() => {
-                        console.log('Selected:', result)
-                        setShowSearchResults(false)
-                      }}
-                    >
-                      <div className={styles.resultType}>{result.type}</div>
-                      <div className={styles.resultInfo}>
-                        <div className={styles.resultName}>{result.name}</div>
-                        <div className={styles.resultPath}>{result.path}</div>
-                      </div>
-                    </button>
-                  ))
-                ) : !(aiMode || aiSubmitted) ? (
-                  <div className={styles.noResults}>
-                    No results found for &quot;{searchQuery}&quot;
-                  </div>
-                ) : null}
-              </>
-            ) : aiMode || aiSubmitted ? (
+            {aiMode || aiSubmitted ? (
               <div className={styles.aiResponse}>
                 {aiIsLoading && (
                   <div className={styles.aiResponseStatus}>
                     <span className={styles.aiStatusDot} />
                     <span>
                       {aiPendingToolCount > 0
-                        ? `Executing ${aiPendingToolCount > 1 ? 'tool' : 'tools'}...`
+                        ? `Executing ${aiPendingToolCount} tool${aiPendingToolCount > 1 ? 's' : ''}...`
                         : 'Thinking...'}
                     </span>
                   </div>
@@ -593,7 +479,7 @@ export function Toolbar() {
                 <button
                   className={styles.continueLink}
                   onClick={() => {
-                    dockWidget('ai-assistant', 'right-top')
+                    dockWidget('ai-assistant', lastAIZoneRef.current)
                     setShowSearchResults(false)
                   }}
                 >
@@ -628,183 +514,45 @@ export function Toolbar() {
 
       <div className={styles.section}>
         <div className={styles.group}>
-          <div
-            ref={tasksMenuRef}
-            className={`${styles.toolbarIconPair} ${(aiPanelVisible || viewportAIInputOpen) ? styles.toolbarIconPairPressed : ''} ${drawerIconPersistent ? styles.drawerIconRevealed : ''}`}
-          >
-            <div
-              className={`${styles.toolbarIconPairIcon} ${aiPanelVisible ? styles.activeToolbarIcon : ''} ${aiGenerating ? styles.nebulaPulsing : ''}`}
-              onClick={toggleAIPanel}
-              onKeyDown={(e) => e.key === 'Enter' && toggleAIPanel()}
-              role="button"
-              tabIndex={0}
+          <div>
+            <img src={annotationIcon} alt="Annotation" width={16} height={16} />
+          </div>
+          <div className={aiPanelVisible ? styles.activeToolbarIcon : ''}>
+            <button
+              type="button"
+              className={styles.groupIconButton}
               title="AI Assistant"
-              aria-label="Toggle composer"
+              aria-label="AI Assistant"
+              onClick={toggleAIPanel}
             >
-              <img src={aiAssistantIcon} alt="AI Assistant" width={16} height={16} style={{ width: 16, height: 16, padding: 0 }} />
-            </div>
-            {showTasksMenu && (
-              <div
-                ref={tasksMenuDropdownRef}
-                className={`${styles.aiSettingsDropdown} ${styles.tasksMenuDropdown}`}
-                style={tasksMenuPosition ? { position: 'fixed', left: tasksMenuPosition.left, top: tasksMenuPosition.top, right: 'auto' } : undefined}
-              >
-                <div className={styles.tasksMenuHeader}>Running tasks</div>
-                {hasPlanPendingApproval && (
-                  <button
-                    type="button"
-                    className={styles.tasksMenuApprovalBanner}
-                    onClick={() => setApprovalSectionExpanded((v) => !v)}
-                    aria-expanded={approvalSectionExpanded}
-                    aria-controls="tasks-menu-approval-content"
-                  >
-                    {approvalSectionExpanded ? (
-                      <ChevronDown size={14} className={styles.tasksMenuApprovalBannerChevron} />
-                    ) : (
-                      <ChevronRight size={14} className={styles.tasksMenuApprovalBannerChevron} />
-                    )}
-                    Awaiting Approval
-                  </button>
-                )}
-                {backgroundTasks.length === 0 ? (
-                  (() => {
-                    const activeCount = inProgressCount + (aiGenerating ? 1 : 0)
-                    const showSpinnerInMenu = activeCount > 0
-                    if (hasPlanPendingApproval && activeConversation && approvalSectionExpanded) {
-                      return (
-                        <div id="tasks-menu-approval-content" className={styles.tasksMenuOpenChatRow}>
-                          <span className={styles.tasksMenuOpenChatTitle} title={activeConversation.summary || activeConversation.title}>
-                            {truncateTitle(activeConversation.summary || activeConversation.title)}
-                          </span>
-                          <button
-                            type="button"
-                            className={styles.tasksMenuOpenChatAction}
-                            onClick={() => {
-                              dockWidget('ai-assistant', 'right-top')
-                              setAiAssistantBodyCollapsed(false)
-                              setShowTasksMenu(false)
-                            }}
-                          >
-                            Respond
-                          </button>
-                        </div>
-                      )
-                    }
-                    if (showSpinnerInMenu) {
-                      return (
-                        <div className={styles.tasksMenuEmpty} aria-busy="true">
-                          <Loader2 size={14} className={styles.tasksMenuEmptySpinner} />
-                          <span>Work in progress</span>
-                        </div>
-                      )
-                    }
-                    return <div className={styles.tasksMenuEmpty}>No background tasks</div>
-                  })()
-                ) : (
-                  <ul className={styles.tasksMenuList} role="list">
-                    {backgroundTasks.map((task) => (
-                      <li key={task.id} className={styles.tasksMenuItem}>
-                        <div className={styles.tasksMenuLabelWrap}>
-                          <span className={styles.tasksMenuLabel} title={stripLeadingBrackets(task.command)}>
-                            {truncateTitle(stripLeadingBrackets(task.summary ?? task.command))}
-                          </span>
-                          <span
-                            className={`${styles.tasksMenuStatus} ${task.status === 'error' ? styles.tasksMenuStatusError : ''} ${task.status === 'done' ? styles.tasksMenuStatusDone : ''}`}
-                            title={task.status === 'error' && task.error ? task.error : undefined}
-                          >
-                            {task.status === 'running' && <Loader2 size={12} className={styles.tasksMenuStatusIcon} />}
-                            {task.status === 'pending' && <Clock size={12} className={styles.tasksMenuStatusIcon} />}
-                            {task.status === 'done' && <Check size={12} className={styles.tasksMenuStatusIcon} />}
-                            {task.status === 'error' && <AlertCircle size={12} className={styles.tasksMenuStatusIcon} />}
-                            <span>{task.status}</span>
-                          </span>
-                          {task.status === 'error' && task.error && (
-                            <span className={styles.tasksMenuError} title={task.error}>
-                              {task.error}
-                            </span>
-                          )}
-                        </div>
-                        <div className={styles.tasksMenuActions}>
-                          {(task.status === 'done' || task.status === 'error') && task.messageIds && task.messageIds.length > 0 && (
-                            <button
-                              type="button"
-                              className={styles.tasksMenuActionBtn}
-                              onClick={() => {
-                                promoteToConversation(task.id)
-                                setShowTasksMenu(false)
-                                dockWidget('ai-assistant', 'right-top')
-                              }}
-                            >
-                              Open in Assistant
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className={styles.tasksMenuActionBtn}
-                            onClick={() => {
-                              dismissTask(task.id)
-                              if (backgroundTasks.length <= 1) setShowTasksMenu(false)
-                            }}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+              <Sparkles size={16} strokeWidth={1.75} />
+            </button>
+          </div>
+          <div>
+            <img src={notificationIcon} alt="Notifications" width={16} height={16} />
           </div>
           <div
-            ref={hotkeyRef}
-            className={`${styles.aiSettingsWrap} ${showHotkeyList ? styles.pressed : ''}`}
+            className={`${styles.settingsWrap} ${settingsPanelOpen ? styles.activeToolbarIcon : ''}`}
           >
             <button
               type="button"
-              onClick={() => setShowHotkeyList((v) => !v)}
-              title="Keyboard Shortcuts"
-              className={showHotkeyList ? styles.aiSettingsButtonPressed : undefined}
-            >
-              <img src={keyCommandIcon} alt="Keyboard Shortcuts" width={18} height={18} style={{ width: 18, height: 18, padding: 0 }} />
-            </button>
-            {showHotkeyList && (
-              <div className={`${styles.aiSettingsDropdown} ${styles.hotkeyDropdown}`}>
-                <div className={styles.hotkeyHeader}>Keyboard Shortcuts</div>
-                <div className={styles.hotkeySection}>
-                  <div className={styles.hotkeySectionLabel}>General</div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Toggle composer</span><kbd className={styles.hotkeyKbd}>⌘ K</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Viewport AI Input</span><kbd className={styles.hotkeyKbd}>⌘ /</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>New Conversation</span><kbd className={styles.hotkeyKbd}>⌘ N</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Close / Dismiss</span><kbd className={styles.hotkeyKbd}>Esc</kbd></div>
-                </div>
-                <div className={styles.hotkeySection}>
-                  <div className={styles.hotkeySectionLabel}>Viewport Tools</div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Select</span><kbd className={styles.hotkeyKbd}>S</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Move</span><kbd className={styles.hotkeyKbd}>W</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Rotate</span><kbd className={styles.hotkeyKbd}>E</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Scale</span><kbd className={styles.hotkeyKbd}>R</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Transform</span><kbd className={styles.hotkeyKbd}>T</kbd></div>
-                  <div className={styles.hotkeyRow}><span className={styles.hotkeyLabel}>Pen Tool</span><kbd className={styles.hotkeyKbd}>P</kbd></div>
-                </div>
-              </div>
-            )}
-          </div>
-          <div
-              className={`${styles.aiSettingsWrap} ${settingsPanelOpen ? styles.pressed : ''}`}
-            >
-            <button
-              type="button"
-              onClick={toggleSettingsPanel}
+              className={styles.groupIconButton}
               title="Settings"
-              className={settingsPanelOpen ? styles.aiSettingsButtonPressed : undefined}
+              aria-label="Settings"
+              onClick={toggleSettingsPanel}
             >
-              <Settings size={16} />
+              <Cog size={16} strokeWidth={1.75} />
             </button>
+            <SettingsPanel />
           </div>
         </div>
+        <div className={styles.group}>
+          <img src={avatar1} alt="Avatar 1" width={24} height={24} className={styles.avatar} />
+          <img src={avatar2} alt="Avatar 2" width={24} height={24} className={styles.avatar} />
+          <img src={avatar3} alt="Avatar 3" width={24} height={24} className={styles.avatar} />
+        </div>
         <button className={styles.testDropdownButton}>
-          <img src={partBlockIcon} alt="Part Block" width={18} height={18} />
+          <img src={partBlockIcon} alt="Part Block" width={16} height={16} />
           <span>Build</span>
           <ExpandDownIcon />
         </button>

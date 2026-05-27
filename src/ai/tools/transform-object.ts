@@ -29,18 +29,14 @@ export function executeTransformObject(args: TransformObjectArgs): { updated: bo
     transform.scale = { x: args.scale[0], y: args.scale[1], z: args.scale[2] }
   }
 
-  // Single batched update + select
-  store.updateAndSelectObject(args.id, { transform })
+  store.updateGameObject(args.id, { transform })
+  store.selectObject(args.id)
 
   const changes: string[] = []
   if (args.position) changes.push('position')
   if (args.rotation) changes.push('rotation')
   if (args.scale) changes.push('scale')
   store.log(`AI: Transformed "${obj.name}" (${changes.join(', ')})`, 'info', 'AI Agent')
-
-  // Brief orange working highlight (Gap 3)
-  useEditorStore.getState().addAIWorkingObject(args.id)
-  setTimeout(() => useEditorStore.getState().removeAIWorkingObject(args.id), 2000)
 
   return { updated: true, id: args.id }
 }

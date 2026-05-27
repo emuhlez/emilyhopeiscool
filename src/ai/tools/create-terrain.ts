@@ -1,5 +1,4 @@
 import { useEditorStore } from '../../store/editorStore'
-import { useDockingStore } from '../../store/dockingStore'
 import type { GameObject, TerrainBiome, TerrainData } from '../../types'
 
 export interface CreateTerrainArgs {
@@ -45,23 +44,14 @@ export function executeCreateTerrain(args: CreateTerrainArgs): { id: string; nam
     },
   }
 
-  const id = store.createAndConfigureObject(
-    'mesh',
-    args.name,
-    workspaceId,
-    updates,
-    { x: px, y: py, z: pz },
+  const id = store.createAndConfigureObject('mesh', args.name, workspaceId, updates)
+  store.selectObject(id)
+
+  store.log(
+    `AI: Created terrain "${args.name}" (${terrainData.biome}, ${terrainData.width}\u00d7${terrainData.depth})`,
+    'info',
+    'AI Agent',
   )
-
-  useDockingStore.getState().setInspectorBodyCollapsed(false)
-  setTimeout(() => {
-    useEditorStore.getState().setRequestFocusSelection(true)
-  }, 150)
-
-  store.log(`AI: Created terrain "${args.name}" (${terrainData.biome}, ${terrainData.width}×${terrainData.depth})`, 'info', 'AI Agent')
-
-  useEditorStore.getState().addAIWorkingObject(id)
-  setTimeout(() => useEditorStore.getState().removeAIWorkingObject(id), 2000)
 
   return { id, name: args.name }
 }

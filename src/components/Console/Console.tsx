@@ -31,7 +31,6 @@ export function Console() {
     <DockablePanel
       widgetId="console"
       title="Console"
-      icon={<Terminal size={16} />}
       actions={
         <div className={styles.actions}>
           <IconButton 

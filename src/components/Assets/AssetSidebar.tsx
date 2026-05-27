@@ -3,7 +3,6 @@ import { X } from 'lucide-react'
 import { ExpandDownIcon, ExpandRightIcon } from '../shared/ExpandIcons'
 import searchIconImg from '../../../images/search.png'
 import type { Asset } from '../../types'
-import { publicUrl } from '../../utils/assetUrl'
 import styles from './Assets.module.css'
 
 const SIDE_NAV_MIN = 220
@@ -113,7 +112,7 @@ export const AssetSidebar = memo(function AssetSidebar({
                     {null}
                   </span>
                   <span className={styles.sideNavIcon}>
-                    <img src={publicUrl('icons/recently-imported.svg')} alt="Import Queue" width={16} height={16} />
+                    <img src="/icons/recently-imported.svg" alt="Import Queue" width={16} height={16} />
                   </span>
                   <span className={styles.sideNavName}>Import Queue</span>
                 </div>
@@ -138,7 +137,7 @@ export const AssetSidebar = memo(function AssetSidebar({
                       {crossyFarmExpanded ? <ExpandDownIcon /> : <ExpandRightIcon />}
                     </span>
                     <span className={styles.sideNavIcon}>
-                      <img src={publicUrl('icons/experience-folder.svg')} alt="Crossy Farm" width={16} height={16} />
+                      <img src="/icons/experience-folder.svg" alt="Crossy Farm" width={16} height={16} />
                     </span>
                     <span className={styles.sideNavName}>Crossy Farm</span>
                   </div>
@@ -167,7 +166,7 @@ export const AssetSidebar = memo(function AssetSidebar({
                             <ExpandRightIcon />
                           </span>
                           <span className={styles.sideNavIcon}>
-                            <img src={publicUrl('icons/folder.svg')} alt="" width={16} height={16} />
+                            <img src="/icons/folder.svg" alt="" width={16} height={16} />
                           </span>
                           <span className={styles.sideNavName}>{displayName}</span>
                         </div>

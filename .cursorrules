@@ -80,43 +80,17 @@ src/
 
 ### Color Palette
 Use these CSS variables consistently:
-- Surfaces: `--bg-surface0` (#121215), `--bg-surface100` (#191A1F), `--bg-surface200` (#202227), `--bg-surface300` (#272930)
-- Aliases: `--bg-panel` (surface100), `--bg-darkest` (surface0), `--bg-surface` (surface100)
-- Accent: `--accent-primary` (#335FFF)
-- Content: `--content-emphasis` (#F7F7F8), `--content-default` (#D5D7DD), `--content-muted` (#BCBEC8), `--content-link` (#528BFF)
-- Semantic: `--color-success` (#39C582), `--color-warning` (#F2BA2A), `--color-error` (#DF281F), `--color-emphasis` (#335FFF)
-- Borders: `--border-subtle` (white 6%), `--border-default` (white 10%), `--border-strong` (white 15%)
-
-### Interaction States
-All interactive elements (icons, buttons, list items) use these states built from #D0D9FB:
-- **Hover**: `--content-hover` — `rgba(208, 217, 251, 0.08)` (#D0D9FB at 8%)
-- **Pressed / Active**: `--content-pressed` — `rgba(208, 217, 251, 0.12)` (#D0D9FB at 12%)
-
-Apply these as `background` on the element's `:hover` and `:active` pseudo-classes respectively. Example for an icon button:
-```css
-.iconButton:hover {
-  background: var(--content-hover);
-}
-.iconButton:active {
-  background: var(--content-pressed);
-}
-```
+- Background: `--bg-darkest` (#121215), `--bg-dark`, `--bg-panel`, `--bg-surface`
+- Accent: `--accent-primary` (#e67e22), `--accent-light`, `--accent-dark`
+- Secondary: `--accent-secondary` (#00d4aa)
+- Text: `--text-primary`, `--text-secondary`, `--text-muted`
+- Semantic: `--color-success`, `--color-warning`, `--color-error`, `--color-info`
 
 ### Icons
 - Use Lucide React for all icons
 - Keep icon size consistent (12-24px typically)
 - Use semantic icon names
 - Color icons using CSS variables
-- Always implement hover (`--content-hover`) and pressed (`--content-pressed`) background states on clickable icons
-
-### Dropdowns & Menus
-- **All dropdowns, menus, and popovers MUST stay fully within the viewport.** They must never trail off any edge of the screen.
-- Use `useLayoutEffect` (not `useEffect`) to measure the element after render and apply corrective positioning before paint, so the user never sees a flash.
-- For absolutely-positioned menus, apply a corrective `transform: translate(dx, dy)` to nudge the element back inside the viewport. See `clampToViewport()` in `MenuDropdown.tsx` for the canonical implementation.
-- For submenus, flip horizontally (`left: auto; right: calc(100% - 4px)`) when overflowing the right edge, and use `translateY()` for vertical overflow.
-- For fixed-positioned menus (e.g. FilterMenu), directly adjust `top`/`right` style properties to clamp within bounds.
-- Always leave at least 8px padding from the viewport edges.
-- The shared `ContextMenu` component already handles viewport clamping — do not duplicate that logic when `MenuDropdown` is rendered inside it (the clamp utility skips elements with `position: relative`).
 
 ### Accessibility
 - Use semantic HTML elements

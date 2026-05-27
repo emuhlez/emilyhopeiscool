@@ -95,25 +95,33 @@ function isPlanFollowUp(text: string): boolean {
   return /^\[PLAN_FOLLOWUP:/i.test(text)
 }
 
-/** Render lightweight bold markup: turns **Title** into a <strong>Title</strong> span. */
+/** Render message text: bolds **markdown** tokens and leading /slashCommands. */
 function renderTextWithBold(text: string) {
   const nodes: Array<string | JSX.Element> = []
+
+  // Bold a leading slash command (e.g. "/plan build an obby" → <strong>/plan</strong> build an obby)
+  let remaining = text
+  const slashMatch = remaining.match(/^(\/\S+)(.*)$/s)
+  if (slashMatch) {
+    nodes.push(<strong key="slash">{slashMatch[1]}</strong>)
+    remaining = slashMatch[2]
+  }
+
+  // Bold **markdown** tokens in the rest of the text
   const regex = /\*\*(.+?)\*\*/g
   let lastIndex = 0
   let match: RegExpExecArray | null
 
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(remaining)) !== null) {
     if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index))
+      nodes.push(remaining.slice(lastIndex, match.index))
     }
-    nodes.push(
-      <strong key={`b-${nodes.length}`}>{match[1]}</strong>,
-    )
+    nodes.push(<strong key={`b-${nodes.length}`}>{match[1]}</strong>)
     lastIndex = match.index + match[0].length
   }
 
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex))
+  if (lastIndex < remaining.length) {
+    nodes.push(remaining.slice(lastIndex))
   }
 
   return nodes
@@ -202,7 +210,7 @@ export function MessageBubble({ message, isGenerating = false, isError = false, 
       )}
 
       {textToShow && !hasQuestionPlan ? (
-        <div className={styles.bubbleText}>
+        <div className={`${styles.bubbleText}${isGenerating ? ` ${styles.generatingText}` : ''}`}>
           {renderTextWithBold(textToShow)}
         </div>
       ) : null}

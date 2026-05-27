@@ -16,4 +16,5 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'script_run', label: '/script_run', description: 'Run a script' },
   { id: 'script_debug', label: '/script_debug', description: 'Debug a script' },
   { id: 'script_variables', label: '/script_variables', description: 'Manage script variables' },
+  { id: 'demo', label: '/demo', description: 'Simulate an AI assistant response in the panel' },
 ]

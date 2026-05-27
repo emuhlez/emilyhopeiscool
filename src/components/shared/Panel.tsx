@@ -3,7 +3,6 @@ import styles from './Panel.module.css'
 
 interface PanelProps {
   title: string
-  icon?: ReactNode
   children: ReactNode
   actions?: ReactNode
   className?: string
@@ -11,9 +10,8 @@ interface PanelProps {
 
 interface PanelHeaderProps {
   title: string
-  icon?: ReactNode
   actions?: ReactNode
-  /** Rendered between title and actions (e.g. inline input when panel is collapsed) */
+  /** Rendered between title and actions (e.g. inline composer when panel is collapsed) */
   middle?: ReactNode
   /** Rendered before the title (e.g. Tasks dropdown when "On the left") */
   titleLeading?: ReactNode
@@ -29,7 +27,6 @@ interface PanelHeaderProps {
 
 export function PanelHeader({
   title,
-  icon,
   actions,
   middle,
   titleLeading,
@@ -38,22 +35,15 @@ export function PanelHeader({
   titleFirst,
   headerClassName,
 }: PanelHeaderProps) {
-  const titleEl = centerTitle ? (
-    <div className={styles.titleWrap}>
-      {title ? <h2 className={styles.title}>{title}</h2> : null}
-    </div>
-  ) : (
-    title ? <h2 className={styles.title}>{title}</h2> : null
-  )
+  const titleEl = title ? <h2 className={styles.title}>{title}</h2> : null
   const centerGroup = centerTitle && titleTrailing != null && (
     <div className={styles.titleGroupCenter}>
-      {title ? <h2 className={styles.title}>{title}</h2> : null}
+      {titleEl}
       <span className={styles.titleTrailing}>{titleTrailing}</span>
     </div>
   )
   return (
     <div className={`${styles.header} ${centerGroup ? styles.headerCenterGroup : ''} ${headerClassName || ''}`}>
-      {icon ? <span className={styles.icon}>{icon}</span> : null}
       <div
         className={`${styles.titleArea} ${centerTitle ? styles.titleAreaCenter : ''} ${centerGroup ? styles.titleAreaCenterGroup : ''}`}
       >
@@ -73,10 +63,10 @@ export function PanelHeader({
   )
 }
 
-export function Panel({ title, icon, children, actions, className }: PanelProps) {
+export function Panel({ title, children, actions, className }: PanelProps) {
   return (
     <>
-      <PanelHeader title={title} icon={icon} actions={actions} headerClassName={undefined} />
+      <PanelHeader title={title} actions={actions} />
       <div className={`${styles.panel} ${className || ''}`}>
         <div className={styles.content}>
           {children}

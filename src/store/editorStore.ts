@@ -9,9 +9,6 @@ interface EditorStore extends EditorState {
   
   // Assets
   assets: Asset[]
-
-  // Collaborators (hardcoded for now)
-  collaborators: Array<{ id: string; name: string }>
   
   // Cached flat asset order for efficient range selection
   _flatAssetOrder: string[]
@@ -30,45 +27,19 @@ interface EditorStore extends EditorState {
   selectObject: (id: string | null, options?: { additive?: boolean; range?: boolean }) => void
   selectAsset: (id: string | null, options?: { additive?: boolean; range?: boolean; visibleAssetIds?: string[] }) => void
   setViewportSelectedAsset: (asset: ViewportSelectedAsset | null, options?: { additive?: boolean }) => void
-  setAIInputAnchorPosition: (pos: { x: number; y: number } | null) => void
-  /** Last drawn point in pen tool (viewport-relative); used to anchor contextual input near recent drawing */
-  penToolLastDrawnPosition: { x: number; y: number } | null
-  setPenToolLastDrawnPosition: (pos: { x: number; y: number } | null) => void
-  /** Shift+click/drag area selection circle (viewport-relative CSS px) */
-  areaSelectionCircle: { centerX: number; centerY: number; radius: number } | null
-  setAreaSelectionCircle: (circle: { centerX: number; centerY: number; radius: number } | null) => void
-  /** When true, viewport will focus camera on selected object(s) on next frame */
-  requestFocusSelection: boolean
-  setRequestFocusSelection: (v: boolean) => void
-  /** When true, the next selection change should NOT insert a pill into the AI input (e.g. double-click to focus) */
-  skipPillInsertion: boolean
-  setSkipPillInsertion: (v: boolean) => void
-  /** Which input activated @-mention picking mode (null = inactive) */
-  mentionPickingSource: 'ai-assistant' | 'viewport-input' | null
-  setMentionPickingSource: (source: 'ai-assistant' | 'viewport-input' | null) => void
-  /** One-shot signal: viewport picked an object for @-mention insertion */
-  mentionPickedObject: { id: string; name: string; objectType?: string } | null
-  setMentionPickedObject: (obj: { id: string; name: string; objectType?: string } | null) => void
-  /** True when the main AI chat is streaming/generating a response */
-  aiGenerating: boolean
-  setAiGenerating: (v: boolean) => void
-  /** When set, viewport plays a particle burst at this position (e.g. when AI creates an object) */
-  creationEffectPosition: { x: number; y: number; z: number } | null
-  setCreationEffectPosition: (p: { x: number; y: number; z: number } | null) => void
   
   // Actions - Scene
-  createGameObject: (type: GameObjectType, name?: string, parentId?: string | null, options?: { select?: boolean }) => string
-  /** Batched create: creates object, applies updates, selects, and sets creation effect in a single store update */
-  createAndConfigureObject: (type: GameObjectType, name: string, parentId: string | null, updates: Partial<GameObject>, effectPos?: { x: number; y: number; z: number }) => string
-  /** Batched update+select: applies updates and selects object in a single store update */
-  updateAndSelectObject: (id: string, updates: Partial<GameObject>) => void
+  createGameObject: (type: GameObjectType, name?: string, parentId?: string | null) => string
+  /** Create a game object then merge in additional properties (e.g. transform, color, primitiveType). Used by AI tools. */
+  createAndConfigureObject: (
+    type: GameObjectType,
+    name: string,
+    parentId: string | null,
+    updates: Partial<GameObject>,
+  ) => string
   addWorkspaceModel: (name: string) => string
   deleteGameObject: (id: string) => void
   updateGameObject: (id: string, updates: Partial<GameObject>) => void
-  /** Set visible: true on all objects that are currently hidden */
-  showAllHiddenObjects: () => void
-  /** Remove all GLB models (library + user-loaded) from the scene; keeps default scene objects */
-  removeAllGlbObjects: () => void
   duplicateGameObject: (id: string) => void
   reparentGameObject: (id: string, newParentId: string | null) => void
   reimportGameObject: (id: string) => void
@@ -80,7 +51,6 @@ interface EditorStore extends EditorState {
   
   // Actions - Tools
   setActiveTool: (tool: EditorState['activeTool']) => void
-  setSelectMode: (mode: EditorState['selectMode']) => void
   setViewMode: (mode: EditorState['viewMode']) => void
   toggleGrid: () => void
   toggleSnap: () => void
@@ -88,6 +58,18 @@ interface EditorStore extends EditorState {
   // Actions - Console
   log: (message: string, type?: ConsoleMessage['type'], source?: string) => void
   clearConsole: () => void
+
+  // Actions - AI working state (stubs for AI hook compatibility, not yet rendered in viewport)
+  aiGenerating: boolean
+  aiWorkingObjectIds: Set<string>
+  requestFocusSelection: boolean
+  setAiGenerating: (value: boolean) => void
+  setAiWorkingObjectIds: (ids: Set<string>) => void
+  addAIWorkingObject: (id: string) => void
+  removeAIWorkingObject: (id: string) => void
+  setRequestFocusSelection: (value: boolean) => void
+  /** Optional camera info accessor used in sketch mode (not implemented in studio-shell yet). */
+  getCameraInfo?: () => { position: { x: number; y: number; z: number }; target: { x: number; y: number; z: number }; fov: number } | null
 
   // Actions - Assets
   importAssets: (files: File[]) => void
@@ -100,27 +82,6 @@ interface EditorStore extends EditorState {
   createFolder: (name?: string) => string
   moveAssetToFolder: (assetId: string, targetFolderId: string) => void
   saveGameObjectAsAsset: (gameObjectId: string, name?: string) => string
-
-  // AI working object indicators (Gap 3)
-  aiWorkingObjectIds: Set<string>
-  addAIWorkingObject: (id: string) => void
-  removeAIWorkingObject: (id: string) => void
-  setAiWorkingObjectIds: (ids: Set<string>) => void
-  /** Per-object screen positions for in-progress overlay icons */
-  aiWorkingObjectPositions: { id: string; x: number; y: number }[]
-  setAiWorkingObjectPositions: (pos: { id: string; x: number; y: number }[]) => void
-
-  // Viewport capture for pen tool compositing
-  captureViewportScreenshot: (() => string | null) | null
-  setCaptureViewportScreenshot: (fn: (() => string | null) | null) => void
-
-  // Screen-to-world raycast for spatial positioning
-  screenToWorld: ((screenX: number, screenY: number) => { x: number; y: number; z: number } | null) | null
-  setScreenToWorld: (fn: ((screenX: number, screenY: number) => { x: number; y: number; z: number } | null) | null) => void
-
-  // Camera info for spatial context in AI prompts
-  getCameraInfo: (() => { position: { x: number; y: number; z: number }; target: { x: number; y: number; z: number }; fov: number } | null) | null
-  setGetCameraInfo: (fn: (() => { position: { x: number; y: number; z: number }; target: { x: number; y: number; z: number }; fov: number } | null) | null) => void
 }
 
 const createDefaultTransform = () => ({
@@ -278,8 +239,119 @@ const computeFlatAssetOrder = (assets: Asset[]): string[] => {
   return order
 }
 
-// Initial demo assets (empty — no preloaded content)
-const initialAssets: Asset[] = []
+// Initial demo assets
+const initialAssets: Asset[] = [
+  { id: uuid(), name: 'Bench A', type: 'model', path: '/3d-space/Bench A.glb', thumbnail: '/thumbnails/Bench-A.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Bench B', type: 'model', path: '/3d-space/Bench B.glb', thumbnail: '/thumbnails/Bench-B.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Boots', type: 'model', path: '/3d-space/Boots.glb', thumbnail: '/thumbnails/Boots.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Cobblestones', type: 'model', path: '/3d-space/Cobblestones.glb', thumbnail: '/thumbnails/Cobblestones.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Doormat', type: 'model', path: '/3d-space/Doormat.glb', thumbnail: '/thumbnails/Doormat.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Corner', type: 'model', path: '/3d-space/Fence Corner.glb', thumbnail: '/thumbnails/Fence-Corner.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Open Long', type: 'model', path: '/3d-space/Fence Open Long.glb', thumbnail: '/thumbnails/Fence-Open-Long.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Open Wide Long', type: 'model', path: '/3d-space/Fence Open Wide Long.glb', thumbnail: '/thumbnails/Fence-Open-Wide-Long.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Open', type: 'model', path: '/3d-space/Fence Open.glb', thumbnail: '/thumbnails/Fence-Open.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Post', type: 'model', path: '/3d-space/Fence Post.glb', thumbnail: '/thumbnails/Fence-Post.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Rails Long', type: 'model', path: '/3d-space/Fence Rails Long.glb', thumbnail: '/thumbnails/Fence-Rails-Long.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Rails', type: 'model', path: '/3d-space/Fence Rails.glb', thumbnail: '/thumbnails/Fence-Rails.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Straight Long', type: 'model', path: '/3d-space/Fence Straight Long.glb', thumbnail: '/thumbnails/Fence-Straight-Long.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Straight', type: 'model', path: '/3d-space/Fence Straight.glb', thumbnail: '/thumbnails/Fence-Straight.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Fence Wide Long', type: 'model', path: '/3d-space/Fence Wide Long.glb', thumbnail: '/thumbnails/Fence-Wide-Long.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Floor Base', type: 'model', path: '/3d-space/Floor Base.glb', thumbnail: '/thumbnails/Floor-Base.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Foliage A', type: 'model', path: '/3d-space/Foliage A.glb', thumbnail: '/thumbnails/Foliage-A.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Foliage B', type: 'model', path: '/3d-space/Foliage B.glb', thumbnail: '/thumbnails/Foliage-B.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Gate Double Left', type: 'model', path: '/3d-space/Gate Double Left.glb', thumbnail: '/thumbnails/Gate-Double-Left.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Gate Double Right', type: 'model', path: '/3d-space/Gate Double Right.glb', thumbnail: '/thumbnails/Gate-Double-Right.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Gate Single', type: 'model', path: '/3d-space/Gate Single.glb', thumbnail: '/thumbnails/Gate-Single.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'House', type: 'model', path: '/3d-space/House.glb', thumbnail: '/thumbnails/House.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Letter', type: 'model', path: '/3d-space/Letter.glb', thumbnail: '/thumbnails/Letter.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Mailbox', type: 'model', path: '/3d-space/Mailbox.glb', thumbnail: '/thumbnails/Mailbox.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Package', type: 'model', path: '/3d-space/Package.glb', thumbnail: '/thumbnails/Package.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Tree Large', type: 'model', path: '/3d-space/Tree Large.glb', thumbnail: '/thumbnails/Tree-Large.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  { id: uuid(), name: 'Tree', type: 'model', path: '/3d-space/Tree.glb', thumbnail: '/thumbnails/Tree.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+  {
+    id: uuid(),
+    name: 'Textures',
+    type: 'folder',
+    path: '/Textures',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'texture_16px 1', type: 'texture', path: '/textures/texture_16px 1.png', thumbnail: '/textures/texture_16px 1.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 2', type: 'texture', path: '/textures/texture_16px 2.png', thumbnail: '/textures/texture_16px 2.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 3', type: 'texture', path: '/textures/texture_16px 3.png', thumbnail: '/textures/texture_16px 3.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 4', type: 'texture', path: '/textures/texture_16px 4.png', thumbnail: '/textures/texture_16px 4.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 5', type: 'texture', path: '/textures/texture_16px 5.png', thumbnail: '/textures/texture_16px 5.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 6', type: 'texture', path: '/textures/texture_16px 6.png', thumbnail: '/textures/texture_16px 6.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 7', type: 'texture', path: '/textures/texture_16px 7.png', thumbnail: '/textures/texture_16px 7.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 8', type: 'texture', path: '/textures/texture_16px 8.png', thumbnail: '/textures/texture_16px 8.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 9', type: 'texture', path: '/textures/texture_16px 9.png', thumbnail: '/textures/texture_16px 9.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 10', type: 'texture', path: '/textures/texture_16px 10.png', thumbnail: '/textures/texture_16px 10.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 11', type: 'texture', path: '/textures/texture_16px 11.png', thumbnail: '/textures/texture_16px 11.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 12', type: 'texture', path: '/textures/texture_16px 12.png', thumbnail: '/textures/texture_16px 12.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 13', type: 'texture', path: '/textures/texture_16px 13.png', thumbnail: '/textures/texture_16px 13.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 14', type: 'texture', path: '/textures/texture_16px 14.png', thumbnail: '/textures/texture_16px 14.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 15', type: 'texture', path: '/textures/texture_16px 15.png', thumbnail: '/textures/texture_16px 15.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 16', type: 'texture', path: '/textures/texture_16px 16.png', thumbnail: '/textures/texture_16px 16.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 17', type: 'texture', path: '/textures/texture_16px 17.png', thumbnail: '/textures/texture_16px 17.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 18', type: 'texture', path: '/textures/texture_16px 18.png', thumbnail: '/textures/texture_16px 18.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 19', type: 'texture', path: '/textures/texture_16px 19.png', thumbnail: '/textures/texture_16px 19.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'texture_16px 20', type: 'texture', path: '/textures/texture_16px 20.png', thumbnail: '/textures/texture_16px 20.png', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+  {
+    id: uuid(),
+    name: 'Audio',
+    type: 'folder',
+    path: '/Audio',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'jump.wav', type: 'audio', path: '/Audio/jump.wav', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'background.mp3', type: 'audio', path: '/Audio/background.mp3', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+  {
+    id: uuid(),
+    name: 'Scripts',
+    type: 'folder',
+    path: '/Scripts',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'PlayerController.ts', type: 'script', path: '/Scripts/PlayerController.ts', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'EnemyAI.ts', type: 'script', path: '/Scripts/EnemyAI.ts', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+  {
+    id: uuid(),
+    name: 'Materials',
+    type: 'folder',
+    path: '/Materials',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'Ground.mat', type: 'material', path: '/Materials/Ground.mat', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+  {
+    id: uuid(),
+    name: 'Prefabs',
+    type: 'folder',
+    path: '/Prefabs',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'Enemy.prefab', type: 'prefab', path: '/Prefabs/Enemy.prefab', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'Coin.prefab', type: 'prefab', path: '/Prefabs/Coin.prefab', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+  {
+    id: uuid(),
+    name: 'Scenes',
+    type: 'folder',
+    path: '/Scenes',
+    dateModified: generateDateModified(),
+    children: [
+      { id: uuid(), name: 'MainMenu.scene', type: 'scene', path: '/Scenes/MainMenu.scene', assetId: generateAssetId(), dateModified: generateDateModified() },
+      { id: uuid(), name: 'Level1.scene', type: 'scene', path: '/Scenes/Level1.scene', assetId: generateAssetId(), dateModified: generateDateModified() },
+    ],
+  },
+]
 
 export const useEditorStore = create<EditorStore>((set, get) => {
   const initialAssetList = loadSavedAssets()
@@ -290,18 +362,9 @@ export const useEditorStore = create<EditorStore>((set, get) => {
   selectedAssetIds: [],
   selectedAssetAnchor: null as string | null,
   viewportSelectedAssetNames: [],
-  aiInputAnchorPosition: null as { x: number; y: number } | null,
-  penToolLastDrawnPosition: null as { x: number; y: number } | null,
-  requestFocusSelection: false,
-  skipPillInsertion: false,
-  mentionPickingSource: null,
-  mentionPickedObject: null,
-  aiGenerating: false,
-  creationEffectPosition: null,
   isPlaying: false,
   isPaused: false,
   activeTool: 'select',
-  selectMode: 'single',
   viewMode: '3d',
   showGrid: true,
   snapToGrid: true,
@@ -310,10 +373,6 @@ export const useEditorStore = create<EditorStore>((set, get) => {
     gameObjects: initialScene.objects,
     rootObjectIds: initialScene.rootIds,
     assets: initialAssetList,
-    collaborators: [
-      { id: 'collab-david', name: 'David' },
-      { id: 'collab-jim', name: 'Jim' },
-    ],
     _flatAssetOrder: computeFlatAssetOrder(initialAssetList),
     importQueue: [],
     consoleMessages: [],
@@ -372,20 +431,8 @@ export const useEditorStore = create<EditorStore>((set, get) => {
       return
     }
 
-    const isOnlySelection = state.selectedObjectIds.length === 1 && state.selectedObjectIds[0] === id
-    if (isOnlySelection) {
-      set({ selectedObjectIds: [], viewportSelectedAssetNames: [] })
-      return
-    }
-
     set({ selectedObjectIds: [id], viewportSelectedAssetNames: idsToNames([id]) })
   },
-  setRequestFocusSelection: (v) => set({ requestFocusSelection: v }),
-  setSkipPillInsertion: (v) => set({ skipPillInsertion: v }),
-  setMentionPickingSource: (source) => set({ mentionPickingSource: source }),
-  setMentionPickedObject: (obj) => set({ mentionPickedObject: obj }),
-  setAiGenerating: (v) => set({ aiGenerating: v }),
-  setCreationEffectPosition: (p) => set({ creationEffectPosition: p }),
   selectAsset: (id, options) => {
     if (id == null) {
       set({ selectedAssetIds: [], selectedAssetAnchor: null })
@@ -454,13 +501,9 @@ export const useEditorStore = create<EditorStore>((set, get) => {
       selectedObjectIds: matchingId ? [matchingId] : [],
     })
   },
-  setAIInputAnchorPosition: (pos) => set({ aiInputAnchorPosition: pos }),
-  setPenToolLastDrawnPosition: (pos) => set({ penToolLastDrawnPosition: pos }),
-  areaSelectionCircle: null,
-  setAreaSelectionCircle: (circle) => set({ areaSelectionCircle: circle }),
-
+  
   // Scene manipulation
-  createGameObject: (type, name, parentId = null, options) => {
+  createGameObject: (type, name, parentId = null) => {
     const id = uuid()
     const gameObject: GameObject = {
       id,
@@ -491,81 +534,11 @@ export const useEditorStore = create<EditorStore>((set, get) => {
         newRootIds = [...state.rootObjectIds, id]
       }
       
-      return { gameObjects: newObjects, rootObjectIds: newRootIds, ...(options?.select !== false ? { selectedObjectIds: [id] } : {}) }
+      return { gameObjects: newObjects, rootObjectIds: newRootIds, selectedObjectIds: [id] }
     })
-
+    
     get().log(`Created ${gameObject.name}`, 'info')
     return id
-  },
-
-  createAndConfigureObject: (type, name, parentId = null, updates, effectPos) => {
-    const id = uuid()
-    const gameObject: GameObject = {
-      id,
-      name: name || getDefaultName(type),
-      type,
-      transform: createDefaultTransform(),
-      pivot: createDefaultPivot(),
-      visible: true,
-      locked: false,
-      children: [],
-      parentId,
-      components: [],
-      ...updates,
-    }
-
-    set((state) => {
-      const newObjects = { ...state.gameObjects, [id]: gameObject }
-      let newRootIds = state.rootObjectIds
-
-      if (parentId) {
-        const parent = newObjects[parentId]
-        if (parent) {
-          newObjects[parentId] = {
-            ...parent,
-            children: [...parent.children, id],
-          }
-        }
-      } else {
-        newRootIds = [...state.rootObjectIds, id]
-      }
-
-      return {
-        gameObjects: newObjects,
-        rootObjectIds: newRootIds,
-        selectedObjectIds: [id],
-        creationEffectPosition: effectPos ?? null,
-      }
-    })
-
-    get().log(`Created ${gameObject.name}`, 'info')
-    return id
-  },
-
-  updateAndSelectObject: (id, updates) => {
-    set((state) => {
-      const obj = state.gameObjects[id]
-      if (!obj) return state
-      const newGameObjects = {
-        ...state.gameObjects,
-        [id]: { ...obj, ...updates },
-      }
-      // Update viewport selected names if name changed
-      let viewportSelectedAssetNames = state.viewportSelectedAssetNames
-      if (updates.name != null) {
-        const oldName = obj.name
-        if (oldName && viewportSelectedAssetNames.includes(oldName)) {
-          viewportSelectedAssetNames = viewportSelectedAssetNames.map(
-            (n) => (n === oldName ? updates.name as string : n)
-          )
-        }
-      }
-      return {
-        gameObjects: newGameObjects,
-        selectedObjectIds: [id],
-        viewportSelectedAssetNames,
-      }
-    })
   },
 
   addWorkspaceModel: (name) => {
@@ -575,7 +548,13 @@ export const useEditorStore = create<EditorStore>((set, get) => {
     if (!workspace) return ''
     const existing = workspace.children.find((id) => state.gameObjects[id]?.name === name)
     if (existing) return existing
-    return get().createGameObject('mesh', name, workspaceId, { select: false })
+    return get().createGameObject('mesh', name, workspaceId)
+  },
+
+  createAndConfigureObject: (type, name, parentId, updates) => {
+    const id = get().createGameObject(type, name, parentId)
+    if (id) get().updateGameObject(id, updates)
+    return id
   },
 
   deleteGameObject: (id) => {
@@ -643,43 +622,7 @@ export const useEditorStore = create<EditorStore>((set, get) => {
       return { gameObjects: newGameObjects }
     })
   },
-
-  showAllHiddenObjects: () => {
-    set((state) => {
-      const next = { ...state.gameObjects }
-      let changed = false
-      for (const id of Object.keys(next)) {
-        // Show any object that isn't explicitly visible (handles false or undefined)
-        if (next[id].visible !== true) {
-          next[id] = { ...next[id], visible: true }
-          changed = true
-        }
-      }
-      return changed ? { gameObjects: next } : {}
-    })
-  },
-
-  removeAllGlbObjects: () => {
-    const state = get()
-    if (state.rootObjectIds.length === 0) return
-    const workspaceId = state.rootObjectIds[0]
-    const workspace = state.gameObjects[workspaceId]
-    if (!workspace?.children) return
-    const keepNames = new Set(['Camera', 'Terrain', 'Drops', 'Ground', 'Platform'])
-    const toRemove = workspace.children.filter((id) => {
-      const obj = state.gameObjects[id]
-      if (!obj) return false
-      if (keepNames.has(obj.name)) return false
-      const isUserGlb = !!(obj.meshUrl ?? obj.meshFilename ?? obj.importPath)
-      const isLibraryMesh = obj.type === 'mesh' && !obj.primitiveType
-      return isUserGlb || isLibraryMesh
-    })
-    toRemove.forEach((id) => get().deleteGameObject(id))
-    if (toRemove.length > 0) {
-      get().log(`Removed ${toRemove.length} GLB model(s) from scene`, 'info')
-    }
-  },
-
+  
   duplicateGameObject: (id) => {
     const state = get()
     const obj = state.gameObjects[id]
@@ -791,7 +734,6 @@ export const useEditorStore = create<EditorStore>((set, get) => {
   
   // Tools
   setActiveTool: (tool) => set({ activeTool: tool }),
-  setSelectMode: (mode) => set({ selectMode: mode }),
   setViewMode: (mode) => set({ viewMode: mode }),
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
   toggleSnap: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
@@ -812,6 +754,27 @@ export const useEditorStore = create<EditorStore>((set, get) => {
     }))
   },
   clearConsole: () => set({ consoleMessages: [] }),
+
+  // AI working state stubs
+  aiGenerating: false,
+  aiWorkingObjectIds: new Set<string>(),
+  requestFocusSelection: false,
+  setAiGenerating: (value) => set({ aiGenerating: value }),
+  setAiWorkingObjectIds: (ids) => set({ aiWorkingObjectIds: ids }),
+  addAIWorkingObject: (id) =>
+    set((state) => {
+      const next = new Set(state.aiWorkingObjectIds)
+      next.add(id)
+      return { aiWorkingObjectIds: next }
+    }),
+  removeAIWorkingObject: (id) =>
+    set((state) => {
+      if (!state.aiWorkingObjectIds.has(id)) return state
+      const next = new Set(state.aiWorkingObjectIds)
+      next.delete(id)
+      return { aiWorkingObjectIds: next }
+    }),
+  setRequestFocusSelection: (value) => set({ requestFocusSelection: value }),
 
   // Assets
   addToImportQueue: (files) => {
@@ -1062,38 +1025,6 @@ export const useEditorStore = create<EditorStore>((set, get) => {
       get().log(`Moved "${asset.name}" to "${folder.name}"`, 'info')
     }
   },
-
-  // AI working object indicators (Gap 3)
-  aiWorkingObjectIds: new Set<string>(),
-  addAIWorkingObject: (id) => {
-    set((state) => {
-      const next = new Set(state.aiWorkingObjectIds)
-      next.add(id)
-      return { aiWorkingObjectIds: next }
-    })
-  },
-  removeAIWorkingObject: (id) => {
-    set((state) => {
-      const next = new Set(state.aiWorkingObjectIds)
-      next.delete(id)
-      return { aiWorkingObjectIds: next }
-    })
-  },
-  setAiWorkingObjectIds: (ids) => set({ aiWorkingObjectIds: ids }),
-  aiWorkingObjectPositions: [],
-  setAiWorkingObjectPositions: (pos) => set({ aiWorkingObjectPositions: pos }),
-
-  // Viewport capture for pen tool compositing
-  captureViewportScreenshot: null,
-  setCaptureViewportScreenshot: (fn) => set({ captureViewportScreenshot: fn }),
-
-  // Screen-to-world raycast for spatial positioning
-  screenToWorld: null,
-  setScreenToWorld: (fn) => set({ screenToWorld: fn }),
-
-  // Camera info for spatial context
-  getCameraInfo: null,
-  setGetCameraInfo: (fn) => set({ getCameraInfo: fn }),
 
   saveGameObjectAsAsset: (gameObjectId, name) => {
     const state = get()

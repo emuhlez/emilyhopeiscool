@@ -257,9 +257,6 @@
 }
 
 .collapsedInputTextWrap .inputCollapsedTextarea {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   overflow: clip;
 }
 
@@ -448,6 +445,14 @@
   min-width: 0;
 }
 
+.sendGroup {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 /* Filter tool dropdown */
 .filterMenu {
   min-width: 220px;
@@ -584,6 +589,58 @@
   scrollbar-color: var(--border-strong) transparent;
 }
 
+/* A turn = one user message + the assistant messages that follow it.
+   Stacking turns lets each user bubble use position: sticky to act as a
+   section header that pins to the top of the scroll viewport until the
+   next turn's user bubble pushes it out (browser-native sticky behavior). */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Slot wrapper around the user bubble so its right-alignment is preserved
+   while the slot itself can be sticky and span full width. The slot's
+   background fades to transparent so assistant content scrolling underneath
+   remains visible at the bottom of the sticky band. */
+.stickyUserSlot {
+  position: sticky;
+  top: -12px; /* cancel .messages padding-top so the slot sits flush with the scroll edge */
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 0 16px;
+  margin: -12px 0 -16px;
+  /* Solid panel color extends across the entire bubble's vertical extent
+     (top padding through bubble bottom). The fade lives in the bottom 16px
+     of padding only, below the bubble — so multi-line bubbles never sit on
+     a translucent region, regardless of height. */
+  background: linear-gradient(
+    to bottom,
+    var(--bg-surface100) 0,
+    var(--bg-surface100) calc(100% - 16px),
+    rgba(25, 26, 31, 0) 100%
+  );
+  pointer-events: none;
+}
+
+/* Re-enable interaction on the bubble itself (gradient parent disables it
+   so transparent gradient region doesn't block clicks on content beneath). */
+.stickyUserSlot > * {
+  pointer-events: auto;
+}
+
+/* Stack a solid panel-color layer beneath the bubble's translucent tint
+   so assistant text scrolling under the sticky bubble doesn't bleed
+   through. Visually identical to the original at rest because the panel
+   surface is the same color. */
+.stickyUserSlot .userBubble {
+  background:
+    linear-gradient(rgba(208, 217, 251, 0.12), rgba(208, 217, 251, 0.12)),
+    var(--bg-surface100);
+}
+
 .empty {
   display: flex;
   flex-direction: column;
@@ -705,12 +762,43 @@
   word-wrap: break-word;
 }
 
+/* Bubble entrance: user pops up from below; assistant fades in from the left */
+@keyframes bubbleEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+  88% {
+    transform: translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bubbleEnterAssistant {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .userBubble {
   background: rgba(208, 217, 251, 0.12);
   color: white;
   align-self: flex-end;
   border-radius: 12px;
   max-width: 85%;
+  animation: bubbleEnter 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .assistantBubble {
@@ -719,6 +807,47 @@
   align-self: flex-start;
   border-radius: 0;
   padding: 4px 0;
+  animation: bubbleEnterAssistant 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .userBubble,
+  .assistantBubble {
+    animation: none;
+  }
+
+  .toolCardBody {
+    animation: none;
+  }
+
+  .feedbackRow {
+    transform: translateY(0);
+    transition: opacity 0.15s ease;
+  }
+
+  /* Disable streaming/status shimmer gradients — preserve readable text color */
+  .generatingText {
+    animation: none;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: var(--content-default);
+  }
+
+  .statusText {
+    animation: none;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: var(--content-muted);
+  }
+
+  /* Panel-level entrance animations */
+  .content,
+  .mainContent,
+  .collapsedDrawerStack .collapsedInputOnly {
+    animation: none;
+  }
 }
 
 .errorBubble {
@@ -780,17 +909,22 @@
   gap: 2px;
   margin-top: 4px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transform: translateY(4px);
+  transition:
+    opacity 200ms ease-out,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .bubble:hover .feedbackRow,
 .feedbackRow:focus-within {
   opacity: 1;
+  transform: translateY(0);
 }
 
 /* Keep visible when a button has been pressed */
 .feedbackRow.feedbackRowActive {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .feedbackButton {
@@ -1111,9 +1245,26 @@
   color: #ef4444;
 }
 
+@keyframes toolCardExpand {
+  from {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    max-height: 480px;
+    opacity: 1;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+
 .toolCardBody {
+  overflow: hidden;
   padding: 6px 8px;
   border-top: 1px solid var(--border-subtle);
+  animation: toolCardExpand 320ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .toolCardSection {
@@ -2359,6 +2510,24 @@
 
 /* --- Feedback Takeover Composer --- */
 
+/* Lower-half wrapper mirrors .planningComposerLower so the takeover slot
+   sits flush at the bottom of the assistant panel, just like plan mode. */
+.feedbackComposerLower {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  padding-bottom: 0;
+  margin-top: auto;
+  height: 280px;
+}
+
+.feedbackSubmitKbd {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
 .feedbackComposer {
   display: flex;
   flex-direction: column;
@@ -2366,8 +2535,10 @@
   padding: 12px;
   background: var(--bg-surface100);
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .feedbackComposerBody {

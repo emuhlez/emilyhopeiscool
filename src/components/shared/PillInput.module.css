@@ -47,7 +47,7 @@
   user-select: none;
 }
 
-.editor:empty::before {
+.editor[data-empty='true']::before {
   content: attr(data-placeholder);
   color: var(--content-muted, #bcbec8);
   pointer-events: none;
@@ -63,15 +63,15 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--content-default);
-  padding: 2px 8px;
+  padding: 0 6px;
   background: rgba(208, 217, 251, 0.12);
   border-radius: var(--radius-sm, 6px);
   white-space: nowrap;
   max-width: 160px;
   overflow: hidden;
   user-select: all;
-  margin: 4px 6px 4px 0; /* vertical gap between wrapped lines, horizontal gap between pills */
-  line-height: 1;
+  margin: 0 3px;
+  line-height: 20px;
   outline: none;
   box-shadow: none;
 }
@@ -103,10 +103,10 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .slashCommand {
-  color: #ffffff;
+  color: var(--content-emphasis);
   font-weight: 600;
 }

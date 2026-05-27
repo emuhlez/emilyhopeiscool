@@ -2,9 +2,17 @@
 .dropdown {
   position: fixed;
   z-index: 1100;
-  width: 280px;
-  max-height: 300px;
+  /* Hug content: short category lists (Scripts, Folders, Active Tabs, Docs)
+     stay compact so the 220px submenu has room on the right side without
+     pushing past the panel edge. */
+  width: fit-content;
+  min-width: 140px;
+  max-width: 200px;
+  max-height: 320px;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -18,6 +26,28 @@
     0 10px 20px rgba(4, 4, 8, 0.25),
     0 16px 32px rgba(4, 4, 8, 0.25),
     0 48px 56px rgba(4, 4, 8, 0.25);
+}
+
+.dropdown::-webkit-scrollbar,
+.subMenu::-webkit-scrollbar {
+  width: 8px;
+}
+.dropdown::-webkit-scrollbar-track,
+.subMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dropdown::-webkit-scrollbar-thumb,
+.subMenu::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  min-height: 24px;
+}
+.dropdown::-webkit-scrollbar-thumb:hover,
+.subMenu::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  background-clip: padding-box;
 }
 
 .section {
@@ -71,17 +101,28 @@
   user-select: none;
 }
 
-.categoryRow:hover,
-.categoryRow[data-selected="true"] {
+.categoryRow:hover {
   background: var(--content-hover, rgba(208, 217, 251, 0.08));
+}
+
+.categoryRow[data-selected='true'] {
+  background: var(--content-pressed, rgba(208, 217, 251, 0.12));
+}
+
+.categoryRow[data-selected='true']:hover {
+  background: var(--content-pressed, rgba(208, 217, 251, 0.12));
 }
 
 .subMenu {
   position: fixed;
   z-index: 1101;
   width: 220px;
-  max-height: 300px;
+  max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -101,19 +142,28 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 5px 12px;
+  padding: 4px 12px;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
-  color: var(--content-emphasis, #f7f7f8);
-  min-height: 16px;
+  color: var(--content-default, #d5d7dd);
+  min-height: 24px;
 }
 
-.option:hover,
-.option[data-selected="true"] {
+.option:hover {
   background: var(--content-hover, rgba(208, 217, 251, 0.08));
+  color: var(--content-emphasis, #f7f7f8);
+}
+
+.option[data-selected='true'] {
+  background: var(--content-pressed, rgba(208, 217, 251, 0.12));
+  color: var(--content-emphasis, #f7f7f8);
+}
+
+.option[data-selected='true']:hover {
+  background: var(--content-pressed, rgba(208, 217, 251, 0.12));
 }
 
 .icon {
@@ -173,10 +223,3 @@
   white-space: nowrap;
 }
 
-.description {
-  font-size: 11px;
-  color: var(--content-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

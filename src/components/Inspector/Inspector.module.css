@@ -2,13 +2,6 @@
   background: var(--bg-surface200) !important;
 }
 
-/* Gives panel content a height so collapse transition can animate from 70vh to 0 */
-.collapsePlaceholder {
-  min-height: 70vh;
-  width: 100%;
-  pointer-events: none;
-}
-
 .empty {
   display: flex;
   align-items: center;
@@ -62,7 +55,7 @@
   height: 16px;
   appearance: none;
   -webkit-appearance: none;
-  background: var(--url-checkbox-off) center / contain no-repeat;
+  background: url('/icons/checkbox-off.svg') center / contain no-repeat;
   border: none;
   border-radius: 0;
   cursor: pointer;
@@ -70,7 +63,7 @@
 }
 
 .checkbox:checked {
-  background: var(--url-checkbox-on) center / contain no-repeat;
+  background: url('/icons/checkbox-on.svg') center / contain no-repeat;
 }
 
 .nameInput {
@@ -384,8 +377,7 @@
   position: relative;
 }
 
-/* Only show fade when label text is actually truncated */
-.transformLabel.overflowing::after {
+.transformLabel::after {
   content: '';
   position: absolute;
   top: 0;

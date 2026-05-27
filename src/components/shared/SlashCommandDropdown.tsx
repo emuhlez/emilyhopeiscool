@@ -1,8 +1,8 @@
-import { useRef, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { SlashCommandQuery, PillInputHandle } from '../../types'
 import type { SlashCommand } from './slashCommands'
-import styles from './MentionDropdown.module.css'
+import styles from './SlashCommandDropdown.module.css'
 
 interface SlashCommandDropdownProps {
   query: SlashCommandQuery | null
@@ -18,13 +18,28 @@ export function SlashCommandDropdown({ query, commands, pillInputRef, onClose }:
   const filtered = useMemo(() => {
     if (!query) return []
     const q = query.query.toLowerCase()
-    return commands.filter((cmd) => cmd.label.toLowerCase().includes(q) || cmd.id.toLowerCase().includes(q))
+    return commands.filter(
+      (cmd) => cmd.label.toLowerCase().includes(q) || cmd.id.toLowerCase().includes(q),
+    )
   }, [query, commands])
 
-  // Reset selection when query changes
-  useEffect(() => {
+  const updateHighlight = useCallback(() => {
+    const options = menuRef.current?.querySelectorAll('[role="option"]')
+    options?.forEach((el, i) => {
+      ;(el as HTMLElement).dataset.selected = String(i === selectedRef.current)
+    })
+    options?.[selectedRef.current]?.scrollIntoView({ block: 'nearest' })
+  }, [])
+
+  useLayoutEffect(() => {
     selectedRef.current = 0
   }, [query?.query])
+
+  useLayoutEffect(() => {
+    if (!query || filtered.length === 0) return
+    selectedRef.current = Math.min(selectedRef.current, filtered.length - 1)
+    updateHighlight()
+  }, [query, filtered, updateHighlight])
 
   const selectItem = useCallback(
     (cmd: SlashCommand) => {
@@ -34,7 +49,6 @@ export function SlashCommandDropdown({ query, commands, pillInputRef, onClose }:
     [pillInputRef, onClose],
   )
 
-  // Keyboard navigation
   useEffect(() => {
     if (!query || filtered.length === 0) return
     const handler = (e: KeyboardEvent) => {
@@ -54,27 +68,23 @@ export function SlashCommandDropdown({ query, commands, pillInputRef, onClose }:
         }
       }
     }
-    const updateHighlight = () => {
-      const options = menuRef.current?.querySelectorAll('[role="option"]')
-      options?.forEach((el, i) => {
-        ;(el as HTMLElement).dataset.selected = String(i === selectedRef.current)
-      })
-      options?.[selectedRef.current]?.scrollIntoView({ block: 'nearest' })
-    }
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [query, filtered, selectItem])
+  }, [query, filtered, selectItem, updateHighlight])
 
   if (!query || filtered.length === 0) return null
 
   const { rect } = query
+  const DROPDOWN_WIDTH = 280
+  const EDGE_PAD = 8
+  const clampedLeft = Math.min(rect.left, window.innerWidth - DROPDOWN_WIDTH - EDGE_PAD)
   const menuStyle: React.CSSProperties = {
-    left: rect.left,
+    left: Math.max(EDGE_PAD, clampedLeft),
     top: rect.top - 6,
     transform: 'translateY(-100%)',
   }
 
-  const dropdown = (
+  return createPortal(
     <div
       ref={menuRef}
       className={styles.dropdown}
@@ -85,7 +95,7 @@ export function SlashCommandDropdown({ query, commands, pillInputRef, onClose }:
       {filtered.map((cmd, i) => (
         <div
           key={cmd.id}
-          className={styles.option}
+          className={styles.item}
           role="option"
           data-selected={String(i === selectedRef.current)}
           aria-selected={i === selectedRef.current}
@@ -94,14 +104,11 @@ export function SlashCommandDropdown({ query, commands, pillInputRef, onClose }:
             selectItem(cmd)
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-            <span className={styles.label}>{cmd.label}</span>
-            <span className={styles.description}>{cmd.description}</span>
-          </div>
+          <span className={styles.label}>{cmd.label}</span>
+          <span className={styles.caption}>{cmd.description}</span>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
   )
-
-  return createPortal(dropdown, document.body)
 }

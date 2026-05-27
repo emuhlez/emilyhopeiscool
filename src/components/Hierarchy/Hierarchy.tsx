@@ -11,7 +11,7 @@ import {
   Sparkles,
   FileCode,
   Volume2,
-  Layers,
+  Layers
 } from 'lucide-react'
 import { DockablePanel } from '../shared/DockablePanel'
 import { ExpandDownIcon, ExpandRightIcon } from '../shared/ExpandIcons'
@@ -20,14 +20,13 @@ import { ContextMenu, useContextMenu } from '../shared/ContextMenu'
 import type { MenuItem } from '../shared/MenuDropdown'
 import { useEditorStore } from '../../store/editorStore'
 import type { GameObjectType } from '../../types'
-import { publicUrl } from '../../utils/assetUrl'
 import styles from './Hierarchy.module.css'
 
 const typeIcons: Record<GameObjectType, React.ReactNode> = {
   empty: <Layers size={16} />,
   mesh: <Box size={16} />,
-  light: <img src={publicUrl('icons/terrain.svg')} alt="Light" width={16} height={16} />,
-  camera: <img src={publicUrl('icons/camera.svg')} alt="Camera" width={16} height={16} />,
+  light: <img src="/icons/terrain.svg" alt="Light" width={16} height={16} />,
+  camera: <img src="/icons/camera.svg" alt="Camera" width={16} height={16} />,
   audio: <Volume2 size={16} />,
   sprite: <Image size={16} />,
   tilemap: <Grid2X2 size={16} />,
@@ -74,7 +73,7 @@ function ReimportProgress({ isCompleting }: { isCompleting: boolean }) {
   return (
     <div className={styles.reimportProgress}>
       <img 
-        src={publicUrl(`icons/ProgressCircle-${frame}.svg`)} 
+        src={`/icons/ProgressCircle-${frame}.svg`} 
         alt="Reimporting" 
         width={16} 
         height={16}
@@ -247,11 +246,6 @@ function TreeNode({ objectId, depth }: TreeNodeProps) {
               range: e.shiftKey,
             })
           }
-          onDoubleClick={() => {
-            useEditorStore.getState().setSkipPillInsertion(true)
-            selectObject(objectId)
-            useEditorStore.getState().setRequestFocusSelection(true)
-          }}
           onContextMenu={contextMenu.openContextMenu}
           onMouseDown={(e) => {
             // Handle control+click as context menu (for Mac)
@@ -269,9 +263,9 @@ function TreeNode({ objectId, depth }: TreeNodeProps) {
 
           <span className={styles.typeIcon}>
             {obj.parentId === null && obj.name === 'Workspace' ? (
-              <img src={publicUrl('icons/workspace.svg')} alt="Workspace" width={16} height={16} />
+              <img src="/icons/workspace.svg" alt="Workspace" width={16} height={16} />
             ) : obj.name === 'Drops' ? (
-              <img src={publicUrl('icons/folder.svg')} alt="Drops" width={16} height={16} />
+              <img src="/icons/folder.svg" alt="Drops" width={16} height={16} />
             ) : (
               typeIcons[obj.type]
             )}
@@ -319,10 +313,7 @@ function TreeNode({ objectId, depth }: TreeNodeProps) {
 }
 
 export function Hierarchy() {
-  const { rootObjectIds, createGameObject, showAllHiddenObjects } = useEditorStore()
-  const hiddenCount = useEditorStore((s) =>
-    Object.values(s.gameObjects).filter((o) => o.visible !== true).length
-  )
+  const { rootObjectIds, createGameObject } = useEditorStore()
   const [showCreateMenu, setShowCreateMenu] = useState(false)
 
   const createOptions: { type: GameObjectType; label: string }[] = [
@@ -340,16 +331,8 @@ export function Hierarchy() {
     <DockablePanel
       widgetId="explorer"
       title="Explorer"
-      icon={<Layers size={16} />}
       actions={
         <div className={styles.createWrapper}>
-          <IconButton
-            icon={<Eye size={16} />}
-            tooltip={hiddenCount > 0 ? `Show all hidden objects (${hiddenCount})` : 'Show all hidden objects'}
-            onClick={() => showAllHiddenObjects()}
-            size="sm"
-            variant="ghost"
-          />
           <IconButton
             icon={<Plus size={16} />}
             tooltip="Create GameObject"

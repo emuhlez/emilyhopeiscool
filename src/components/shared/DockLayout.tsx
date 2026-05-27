@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { useDockingStore, LEFT_COLLAPSED_WIDTH } from '../../store/dockingStore'
+import { shallow } from 'zustand/shallow'
+import { useDockingStore } from '../../store/dockingStore'
 import type { DockZone } from '../../types'
 import styles from './DockLayout.module.css'
 
@@ -16,16 +17,13 @@ function ResizeHandle({ direction, onDrag, className }: ResizeHandleProps) {
   const draggingRef = useRef(false)
   const startRef = useRef({ x: 0, y: 0 })
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return
-      e.preventDefault()
-      startRef.current = { x: e.clientX, y: e.clientY }
-      draggingRef.current = true
-      ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
-    },
-    []
-  )
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    startRef.current = { x: e.clientX, y: e.clientY }
+    draggingRef.current = true
+    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+  }, [])
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -38,14 +36,11 @@ function ResizeHandle({ direction, onDrag, className }: ResizeHandleProps) {
     [onDrag]
   )
 
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return
-      draggingRef.current = false
-      ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
-    },
-    []
-  )
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    draggingRef.current = false
+    ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
+  }, [])
 
   return (
     <div
@@ -66,13 +61,15 @@ interface DockZoneContainerProps {
 }
 
 export function DockZoneContainer({ zone, children, className }: DockZoneContainerProps) {
-  const widgets = useDockingStore((state) => state.getWidgetsInZone(zone))
+  const widgets = useDockingStore((state) => state.getWidgetsInZone(zone), shallow)
+  const draggingWidgetId = useDockingStore((state) => state.draggingWidgetId)
   const isEmpty = widgets.length === 0
-  
+
   return (
-    <div 
-      className={`${styles.dockZone} ${styles[zone]} ${className || ''} ${isEmpty ? styles.empty : ''}`}
+    <div
+      className={`${styles.dockZone} ${styles[zone]} ${className ?? ''} ${isEmpty ? styles.empty : ''}`}
       data-zone={zone}
+      aria-dropeffect={draggingWidgetId !== null ? 'move' : undefined}
     >
       {children}
     </div>
@@ -83,44 +80,53 @@ interface DockLayoutProps {
   leftZone: ReactNode
   centerTopZone: ReactNode
   centerBottomZone: ReactNode
-  /** Sticky viewport panels keyed by widget id (inspector, ai-assistant). Replaces rightTopZone. */
-  rightTopPanels: Record<string, ReactNode>
+  rightTopZone: ReactNode
   rightBottomZone: ReactNode
 }
 
-/** Sticky panels (e.g. Properties): below viewport panel header, equal right spacing */
-const STICKY_RIGHT_INSET = 16
-const STICKY_TOP_INSET = 52 /* panel header (~36px) + gap so panel sits just below */
-const DEFAULT_STICKY_INSET = { top: STICKY_TOP_INSET, right: STICKY_RIGHT_INSET }
-/** AI Assistant (collapsed and expanded): sticky at bottom-left of viewport with spacing */
-const DEFAULT_AI_ASSISTANT_INSET = { left: 16, bottom: 16 }
-
-export function DockLayout({ leftZone, centerTopZone, centerBottomZone, rightTopPanels, rightBottomZone }: DockLayoutProps) {
-  const leftWidgets = useDockingStore((state) => state.getWidgetsInZone('left'))
-  const centerTopWidgets = useDockingStore((state) => state.getWidgetsInZone('center-top'))
-  const centerBottomWidgets = useDockingStore((state) => state.getWidgetsInZone('center-bottom'))
-  const rightBottomWidgets = useDockingStore((state) => state.getWidgetsInZone('right-bottom'))
-  const stickyWidgets = useDockingStore((state) => state.getStickyWidgets())
-  const draggingStickyWidgetId = useDockingStore((state) => state.draggingStickyWidgetId)
-  const stickyDragPosition = useDockingStore((state) => state.stickyDragPosition)
+export function DockLayout({
+  leftZone,
+  centerTopZone,
+  centerBottomZone,
+  rightTopZone,
+  rightBottomZone,
+}: DockLayoutProps) {
+  const leftWidgets = useDockingStore((state) => state.getWidgetsInZone('left'), shallow)
+  const centerTopWidgets = useDockingStore((state) => state.getWidgetsInZone('center-top'), shallow)
+  const centerBottomWidgets = useDockingStore((state) => state.getWidgetsInZone('center-bottom'), shallow)
+  const rightTopWidgets = useDockingStore((state) => state.getWidgetsInZone('right-top'), shallow)
+  const rightBottomWidgets = useDockingStore((state) => state.getWidgetsInZone('right-bottom'), shallow)
   const draggingWidgetId = useDockingStore((state) => state.draggingWidgetId)
-  const inspectorBodyCollapsed = useDockingStore((state) => state.inspectorBodyCollapsed)
-  const aiAssistantBodyCollapsed = useDockingStore((state) => state.aiAssistantBodyCollapsed)
-  const viewportAIInputOpen = useDockingStore((state) => state.viewportAIInputOpen)
-  const aiAssistantWidth = useDockingStore((state) => state.aiAssistantWidth)
-  const setAiAssistantWidth = useDockingStore((state) => state.setAiAssistantWidth)
   const panelSizes = useDockingStore((state) => state.panelSizes)
   const centerBottomCollapsed = useDockingStore((state) => state.centerBottomCollapsed)
-  const leftCollapsed = useDockingStore((state) => state.leftCollapsed)
   const setPanelSize = useDockingStore((state) => state.setPanelSize)
   const setViewportBounds = useDockingStore((state) => state.setViewportBounds)
+
   const viewportRef = useRef<HTMLDivElement>(null)
 
   const hasLeftWidgets = leftWidgets.length > 0
   const hasCenterWidgets = centerTopWidgets.length > 0 || centerBottomWidgets.length > 0
   const hasCenterBottomWidgets = centerBottomWidgets.length > 0
-  const hasRightWidgets = rightBottomWidgets.length > 0
-  const isDraggingAnyWidget = !!draggingWidgetId
+  const hasRightWidgets = rightTopWidgets.length > 0 || rightBottomWidgets.length > 0
+  const hasRightTopWidgets = rightTopWidgets.length > 0
+  const hasRightBottomWidgets = rightBottomWidgets.length > 0
+  const hasBothRightZones = hasRightTopWidgets && hasRightBottomWidgets
+  const isDraggingAnyWidget = draggingWidgetId !== null
+  const showRightDropLines = isDraggingAnyWidget && hasRightWidgets
+
+  const rightTopState = !hasRightTopWidgets
+    ? showRightDropLines && hasRightBottomWidgets
+      ? styles.rightTopDropLine
+      : styles.rightTopHidden
+    : ''
+
+  const rightBottomState = !hasRightBottomWidgets
+    ? showRightDropLines && hasRightTopWidgets
+      ? styles.rightBottomDropLine
+      : styles.rightBottomHidden
+    : ''
+
+  const showRightBottomDropLine = showRightDropLines && hasRightTopWidgets && !hasRightBottomWidgets
 
   useLayoutEffect(() => {
     const el = viewportRef.current
@@ -147,24 +153,27 @@ export function DockLayout({ leftZone, centerTopZone, centerBottomZone, rightTop
     (dy: number) => setPanelSize('centerBottomHeight', panelSizes.centerBottomHeight + dy),
     [panelSizes.centerBottomHeight, setPanelSize]
   )
+  const onResizeRightBottom = useCallback(
+    (dy: number) => setPanelSize('rightBottomHeight', panelSizes.rightBottomHeight + dy),
+    [panelSizes.rightBottomHeight, setPanelSize]
+  )
+
   return (
     <div className={styles.dockLayout}>
       <div
-        className={`${styles.leftColumn} ${!hasLeftWidgets ? styles.emptyColumn : ''} ${hasLeftWidgets && leftCollapsed ? styles.leftCollapsed : ''}`}
+        className={`${styles.leftColumn} ${!hasLeftWidgets ? styles.emptyColumn : ''}`}
         style={
           hasLeftWidgets
             ? {
                 flex: '0 0 auto',
-                width: leftCollapsed ? LEFT_COLLAPSED_WIDTH : panelSizes.leftWidth,
-                minWidth: leftCollapsed ? LEFT_COLLAPSED_WIDTH : panelSizes.leftWidth,
-                maxWidth: leftCollapsed ? LEFT_COLLAPSED_WIDTH : panelSizes.leftWidth,
+                width: panelSizes.leftWidth,
+                minWidth: panelSizes.leftWidth,
+                maxWidth: panelSizes.leftWidth,
               }
             : undefined
         }
       >
-        <DockZoneContainer zone="left">
-          {leftZone}
-        </DockZoneContainer>
+        <DockZoneContainer zone="left">{leftZone}</DockZoneContainer>
         {hasLeftWidgets && (
           <ResizeHandle
             direction="e"
@@ -177,9 +186,7 @@ export function DockLayout({ leftZone, centerTopZone, centerBottomZone, rightTop
       <div ref={viewportRef} className={styles.centerColumnWrapper}>
         <div className={`${styles.centerColumn} ${!hasCenterWidgets ? styles.emptyColumn : ''}`}>
           <div className={styles.centerTop}>
-            <DockZoneContainer zone="center-top">
-              {centerTopZone}
-            </DockZoneContainer>
+            <DockZoneContainer zone="center-top">{centerTopZone}</DockZoneContainer>
           </div>
           {hasCenterWidgets && hasCenterBottomWidgets && (
             <ResizeHandle
@@ -190,11 +197,13 @@ export function DockLayout({ leftZone, centerTopZone, centerBottomZone, rightTop
           )}
           <div
             className={`${styles.centerBottom} ${!hasCenterBottomWidgets ? styles.centerBottomHidden : ''} ${hasCenterBottomWidgets && centerBottomCollapsed ? styles.centerBottomCollapsed : ''}`}
-            style={hasCenterBottomWidgets ? { height: centerBottomCollapsed ? 36 : panelSizes.centerBottomHeight } : undefined}
+            style={
+              hasCenterBottomWidgets
+                ? { height: centerBottomCollapsed ? 36 : panelSizes.centerBottomHeight }
+                : undefined
+            }
           >
-            <DockZoneContainer zone="center-bottom">
-              {centerBottomZone}
-            </DockZoneContainer>
+            <DockZoneContainer zone="center-bottom">{centerBottomZone}</DockZoneContainer>
           </div>
         </div>
 
@@ -207,78 +216,44 @@ export function DockLayout({ leftZone, centerTopZone, centerBottomZone, rightTop
             <div className={styles.dockCenter} data-edge="center" />
           </>
         )}
-
-        {stickyWidgets.length > 0 && (
-          <div className={styles.stickyLayer} aria-hidden="false">
-            {stickyWidgets.map((w) => {
-              const content = rightTopPanels[w.id]
-              if (!content) return null
-              /* Hide AI Assistant sticky panel when viewport AI input is open (contextual mode) */
-              if (w.id === 'ai-assistant' && viewportAIInputOpen) return null
-              const isDraggingThis = draggingStickyWidgetId === w.id && stickyDragPosition
-              const collapsed =
-                (w.id === 'inspector' && inspectorBodyCollapsed) ||
-                (w.id === 'ai-assistant' && aiAssistantBodyCollapsed)
-              const isAiAssistantCollapsed = w.id === 'ai-assistant' && collapsed
-              const defaultInset =
-                w.id === 'ai-assistant'
-                  ? { left: DEFAULT_AI_ASSISTANT_INSET.left, bottom: DEFAULT_AI_ASSISTANT_INSET.bottom, top: 'auto' as const }
-                  : { top: DEFAULT_STICKY_INSET.top, right: DEFAULT_STICKY_INSET.right, left: 'auto' as const }
-              /* Collapsed AI assistant is always anchored to viewport corner (bottom-left); expanded uses saved position */
-              // When dragging, disable pointer-events so elementFromPoint can detect zones underneath
-              const style = isDraggingThis
-                ? { left: stickyDragPosition.x, top: stickyDragPosition.y, pointerEvents: 'none' as const }
-                : w.id === 'ai-assistant' && collapsed
-                  ? defaultInset
-                  : w.id === 'ai-assistant'
-                    ? w.position
-                      ? { left: w.position.x, top: w.position.y }
-                      : defaultInset
-                    : w.position
-                      ? { left: w.position.x, top: w.position.y }
-                      : defaultInset
-              const panelStyle = w.id === 'ai-assistant' && !collapsed
-                ? { ...style, '--sticky-panel-width': `${aiAssistantWidth}px` } as unknown as React.CSSProperties
-                : style
-              return (
-                <div
-                  key={w.id}
-                  className={`${styles.stickyPanel} ${collapsed ? styles.stickyPanelCollapsed : ''} ${isAiAssistantCollapsed ? styles.stickyPanelAiCollapsed : ''}`}
-                  style={panelStyle}
-                >
-                  {content}
-                  {w.id === 'ai-assistant' && !collapsed && (
-                    <ResizeHandle
-                      direction="e"
-                      className={styles.stickyResizeHandle}
-                      onDrag={(dx) => setAiAssistantWidth(aiAssistantWidth + dx)}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
 
-      {hasRightWidgets && (
-        <div
-          className={styles.rightColumnOverlay}
-          style={{ width: panelSizes.rightWidth, minWidth: panelSizes.rightWidth }}
-        >
+      <div
+        className={`${styles.rightColumn} ${!hasRightWidgets ? styles.emptyColumn : ''}`}
+        style={hasRightWidgets ? { width: panelSizes.rightWidth, minWidth: panelSizes.rightWidth } : undefined}
+      >
+        {hasRightWidgets && (
           <ResizeHandle
             direction="w"
             className={styles.resizeHandleRight}
             onDrag={(dx) => onResizeRight(dx)}
           />
-          <div className={styles.rightTop}>
-            <DockZoneContainer zone="right-bottom">
-              {rightBottomZone}
-            </DockZoneContainer>
-          </div>
+        )}
+        <div className={`${styles.rightTop} ${rightTopState}`}>
+          <DockZoneContainer zone="right-top">{rightTopZone}</DockZoneContainer>
         </div>
-      )}
+        {hasBothRightZones && (
+          <ResizeHandle
+            direction="s"
+            className={styles.resizeHandleRightSplit}
+            onDrag={(_, dy) => onResizeRightBottom(dy)}
+          />
+        )}
+        <div
+          className={`${styles.rightBottom} ${rightBottomState}`}
+          style={
+            showRightBottomDropLine
+              ? undefined
+              : hasBothRightZones
+                ? { flex: '0 0 auto', height: panelSizes.rightBottomHeight, minHeight: 0 }
+                : hasRightBottomWidgets && !hasRightTopWidgets
+                  ? { flex: '1 1 auto', minHeight: 0 }
+                  : undefined
+          }
+        >
+          <DockZoneContainer zone="right-bottom">{rightBottomZone}</DockZoneContainer>
+        </div>
+      </div>
     </div>
   )
 }
-

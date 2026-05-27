@@ -1,4 +1,4 @@
-# AI Native Studio
+# Studio Shell
 
 A modern game editor built with React and TypeScript. Features a professional-grade UI inspired by industry-standard game engines like Unity and Unreal, with a distinctive forge-inspired aesthetic.
 
@@ -17,12 +17,6 @@ A modern game editor built with React and TypeScript. Features a professional-gr
 
 - Node.js 18+
 - npm or yarn
-- [Git LFS](https://git-lfs.com/) — required before cloning (repo uses LFS for images, fonts, and 3D assets)
-
-```bash
-brew install git-lfs
-git lfs install
-```
 
 ### Installation
 
@@ -73,4 +67,8 @@ src/
 ## License
 
 MIT
+
+
+
+
 
