@@ -5,7 +5,6 @@ import type { Tab } from '../components/shared/TabHeader'
 interface WidgetMetadata {
   id: string
   title: string
-  icon?: ReactNode
   actions?: ReactNode
 }
 
@@ -33,7 +32,6 @@ export const useWidgetMetadataStore = create<WidgetMetadataStore>((set, get) => 
     return {
       id: meta.id,
       title: meta.title,
-      icon: meta.icon,
       actions: meta.actions,
     }
   },

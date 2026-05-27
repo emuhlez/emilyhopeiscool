@@ -4,7 +4,8 @@ import { stripLeadingBrackets } from '../ai/strip-brackets'
 import { localStorageManager } from './utils/localStorage'
 import type { Conversation, PersistedMessage, ConversationMode } from '../types'
 
-const STORAGE_KEY = 'studio-ai-conversations'
+const STORAGE_KEY = 'studio-shell-conversations'
+const ACTIVE_KEY = 'studio-shell-active-conversation'
 
 interface ConversationStore {
   conversations: Record<string, Conversation>
@@ -72,9 +73,20 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
     persistConversations(saved)
   }
 
+  // Restore the last active conversation; fall back to the most-recent one if invalid
+  const savedActiveId = localStorageManager.load<string | null>(ACTIVE_KEY, null)
+  const initialActiveId =
+    savedActiveId && saved[savedActiveId]
+      ? savedActiveId
+      : savedIds[savedIds.length - 1]
+
+  const persistActive = (id: string | null) => {
+    localStorageManager.saveNow(ACTIVE_KEY, id)
+  }
+
   return {
     conversations: saved,
-    activeConversationId: savedIds[savedIds.length - 1],
+    activeConversationId: initialActiveId,
     surfaceBindings: {},
     streamingIds: new Set<string>(),
     pendingViewportMessage: null,
@@ -87,6 +99,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
           (c) => c.messages.length === 0 && c.title === 'New Chat',
         )
         if (existing) {
+          persistActive(existing.id)
           set({ activeConversationId: existing.id })
           return existing.id
         }
@@ -105,6 +118,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
       set((state) => {
         const conversations = { ...state.conversations, [id]: conversation }
         persistConversations(conversations)
+        persistActive(id)
         return { conversations, activeConversationId: id }
       })
       return id
@@ -125,6 +139,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
         }
 
         persistConversations(rest)
+        persistActive(newActive)
         return { conversations: rest, activeConversationId: newActive, surfaceBindings }
       })
     },
@@ -132,6 +147,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
     switchConversation: (id) => {
       const state = get()
       if (state.conversations[id]) {
+        persistActive(id)
         set({ activeConversationId: id })
       }
     },
@@ -222,6 +238,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => {
         [id]: { id, title: 'New Chat', createdAt: now, updatedAt: now, messages: [] },
       }
       persistConversations(conversations)
+      persistActive(id)
       set({ conversations, activeConversationId: id, surfaceBindings: {} })
     },
 

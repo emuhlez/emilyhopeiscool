@@ -27,17 +27,6 @@
   gap: 8px;
 }
 
-.icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent-primary);
-}
-
-.icon svg {
-  width: 16px;
-  height: 16px;
-}
-
 .title {
   font-size: 12px;
   font-weight: 700;
@@ -66,9 +55,40 @@
   min-width: 0;
 }
 
+/* External widget drag — insertion cue between tabs (studio-ai parity) */
+.tabDropIndicator {
+  width: 2px;
+  min-width: 2px;
+  height: 60%;
+  align-self: center;
+  background: var(--accent-primary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-glow);
+  flex-shrink: 0;
+  margin: 0 1px;
+  animation: tabDropPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tabDropPulse {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabDropIndicator {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .tabs {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   height: 100%;
   gap: 2px;
   flex: 1;
@@ -159,25 +179,6 @@
 .closeButton svg {
   width: 12px;
   height: 12px;
-}
-
-/* Drop indicator shown between tabs when dragging an external widget */
-.tabDropIndicator {
-  width: 2px;
-  min-width: 2px;
-  height: 60%;
-  align-self: center;
-  background: rgba(208, 217, 251, 0.8);
-  border-radius: 1px;
-  box-shadow: 0 0 6px rgba(208, 217, 251, 0.5);
-  flex-shrink: 0;
-  margin: 0 1px;
-  animation: tabDropPulse 1.2s ease-in-out infinite;
-}
-
-@keyframes tabDropPulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
 }
 
 

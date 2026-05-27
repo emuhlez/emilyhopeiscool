@@ -1,3 +1,4 @@
+import { shallow } from 'zustand/shallow'
 import { useDockingStore } from '../../store/dockingStore'
 import { useWidgetMetadataStore } from '../../store/widgetMetadataStore'
 import { TabbedPanel } from './TabbedPanel'
@@ -10,7 +11,7 @@ interface DockZoneRendererProps {
 }
 
 export function DockZoneRenderer({ zone, widgetMap }: DockZoneRendererProps) {
-  const widgets = useDockingStore((state) => state.getWidgetsInZone(zone))
+  const widgets = useDockingStore((state) => state.getWidgetsInZone(zone), shallow)
   // Subscribe to metadata so we re-render once widgets register themselves.
   const metadata = useWidgetMetadataStore((state) => state.metadata)
   
@@ -27,7 +28,6 @@ export function DockZoneRenderer({ zone, widgetMap }: DockZoneRendererProps) {
         return {
           id: meta.id,
           title: meta.title,
-          icon: meta.icon,
           actions: meta.actions,
         }
       })

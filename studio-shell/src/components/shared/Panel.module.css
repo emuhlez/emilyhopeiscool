@@ -62,17 +62,6 @@
   gap: 8px;
 }
 
-.icon {
-  display: none;
-}
-
-/* Show panel icon for AI assistant (e.g. sidebar icon in sidenav mode) */
-:global([data-widget-id="ai-assistant"]) .icon {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
 .titleWrap {
   flex: 1;
   display: flex;
@@ -118,18 +107,8 @@
   gap: 4px;
 }
 
-/* AI Assistant centered header: pin the collapse button (rendered in titleLeading)
-   to the far left edge of the header while keeping the title+dropdown centered. */
-[data-widget-id="ai-assistant"] .header.headerCenterGroup .titleLeading button {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .content {
   flex: 1;
   overflow: auto;
   color: var(--content-emphasis);
 }
-

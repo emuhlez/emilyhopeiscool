@@ -19,23 +19,13 @@ export function executeSetMaterial(args: SetMaterialArgs): { updated: boolean; i
   }
 
   const updates: Partial<GameObject> = {}
+  if (args.color !== undefined) updates.color = args.color
+  if (args.metalness !== undefined) updates.reflectance = args.metalness
+  if (args.roughness !== undefined) updates.roughness = args.roughness
+  if (args.opacity !== undefined) updates.transparency = 1 - args.opacity
 
-  if (args.color !== undefined) {
-    updates.color = args.color
-  }
-  if (args.metalness !== undefined) {
-    updates.reflectance = args.metalness
-  }
-  if (args.roughness !== undefined) {
-    updates.roughness = args.roughness
-  }
-  if (args.opacity !== undefined) {
-    // Invert: opacity 1 = transparency 0
-    updates.transparency = 1 - args.opacity
-  }
-
-  // Single batched update + select
-  store.updateAndSelectObject(args.id, updates)
+  store.updateGameObject(args.id, updates)
+  store.selectObject(args.id)
 
   const changes: string[] = []
   if (args.color !== undefined) changes.push(`color=${args.color}`)
@@ -43,10 +33,6 @@ export function executeSetMaterial(args: SetMaterialArgs): { updated: boolean; i
   if (args.roughness !== undefined) changes.push(`roughness=${args.roughness}`)
   if (args.opacity !== undefined) changes.push(`opacity=${args.opacity}`)
   store.log(`AI: Updated material on "${obj.name}" (${changes.join(', ')})`, 'info', 'AI Agent')
-
-  // Brief orange working highlight (Gap 3)
-  useEditorStore.getState().addAIWorkingObject(args.id)
-  setTimeout(() => useEditorStore.getState().removeAIWorkingObject(args.id), 2000)
 
   return { updated: true, id: args.id }
 }

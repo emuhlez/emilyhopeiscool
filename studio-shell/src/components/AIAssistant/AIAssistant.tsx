@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, PictureInPicture2, Plus, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import { DockablePanel } from '../shared/DockablePanel'
 import { useDockingStore } from '../../store/dockingStore'
 import { useEditorStore } from '../../store/editorStore'
@@ -7,7 +7,6 @@ import { usePlanExecutor } from '../../ai/use-plan-executor'
 import { usePlanStore } from '../../store/planStore'
 import { useConversationStore } from '../../store/conversationStore'
 import { TasksDropdown } from './TasksDropdown'
-import { ConversationSwitcher } from './ConversationSwitcher'
 import { MessageList } from './MessageList'
 import { BackgroundTaskDrawer } from './BackgroundTaskDrawer'
 import { AssistantSidebar } from './AssistantSidebar'
@@ -17,13 +16,11 @@ import { PlanCard } from './PlanCard'
 import { PillInput, getTextFromSegments } from '../shared/PillInput'
 import { usePredictiveText } from '../shared/usePredictiveText'
 import { MentionDropdown, type MentionItem } from '../shared/MentionDropdown'
+import { MENTION_SCRIPTS, MENTION_READMES, MENTION_PLANS } from '../Viewport/mentionItems'
 import type { InputSegment, PillInputHandle, MentionQuery, SlashCommandQuery } from '../../types'
 import { publicUrl } from '../../utils/assetUrl'
-import { truncateTitle } from '../../ai/strip-brackets'
 import { SLASH_COMMANDS } from '../shared/slashCommands'
 import { SlashCommandDropdown } from '../shared/SlashCommandDropdown'
-import { ViewportChatDropdown, NEW_CHAT_SENTINEL } from '../Viewport/ViewportChatDropdown'
-import { AgentDropdown } from '../Viewport/AgentDropdown'
 import filterIcon from '../../../icons/three-slider.svg'
 import styles from './AIAssistant.module.css'
 
@@ -44,44 +41,56 @@ export function AIAssistant() {
   const taskDrawerMenuSide = useDockingStore((state) => state.taskDrawerMenuSide)
   const assistantPanelMode = useDockingStore((state) => state.assistantPanelMode)
   const gameObjects = useEditorStore((s) => s.gameObjects)
-  const collaborators = useEditorStore((s) => s.collaborators)
   const rootObjectIds = useEditorStore((s) => s.rootObjectIds)
+  const dockedWidgets = useDockingStore((s) => s.widgets)
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null)
   const [slashQuery, setSlashQuery] = useState<SlashCommandQuery | null>(null)
-  const [pendingConvId, setPendingConvId] = useState<string | null>(null)
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
-  const handleChatSelect = useCallback((id: string) => {
-    setPendingConvId(id)
-    requestAnimationFrame(() => pillInputRef.current?.focus())
-  }, [])
-  const handleAgentSelect = useCallback((id: string) => {
-    setSelectedAgent(id)
-    requestAnimationFrame(() => pillInputRef.current?.focus())
-  }, [])
 
   const mentionItems: MentionItem[] = useMemo(() => {
     const items: MentionItem[] = []
-    for (const c of collaborators) {
-      items.push({ id: c.id, label: c.name, kind: 'collaborator', category: 'collaborator' })
-    }
     const workspaceId = rootObjectIds[0]
     const workspace = workspaceId ? gameObjects[workspaceId] : null
-    if (workspace?.children) {
-      for (const childId of workspace.children) {
-        const obj = gameObjects[childId]
-        if (obj && obj.name !== 'Drops') {
-          items.push({
-            id: childId,
-            label: obj.name,
-            kind: 'object',
-            category: 'object',
-            objectType: obj.primitiveType === 'terrain' ? 'terrain' : obj.type !== 'mesh' && obj.type !== 'empty' ? obj.type : undefined,
-          })
+    let hasScripts = false
+
+    // Recursively walk the hierarchy.
+    // type:'empty' objects surface as folders; type:'script' objects surface as scripts.
+    // All other types (mesh, camera, light, etc.) are skipped from the mention list.
+    const walk = (ids: string[], parentPath: string) => {
+      for (const id of ids) {
+        const obj = gameObjects[id]
+        if (!obj || obj.name === 'Drops') continue
+        if (obj.type === 'script') {
+          hasScripts = true
+          items.push({ id, label: obj.name, kind: 'script', category: 'script' })
+        } else if (obj.type === 'empty') {
+          const fullPath = parentPath ? `${parentPath} / ${obj.name}` : obj.name
+          items.push({ id, label: fullPath, kind: 'folder', category: 'folder' })
+          if (obj.children?.length) walk(obj.children, fullPath)
+        } else {
+          if (obj.children?.length) walk(obj.children, parentPath)
         }
       }
     }
+    if (workspace?.children) walk(workspace.children, '')
+
+    // Always include at least one script entry so the category is visible
+    if (!hasScripts) items.push(...MENTION_SCRIPTS)
+    // Active Tabs — derive from currently docked widgets
+    const WIDGET_LABELS: Record<string, string> = {
+      viewport: 'Viewport',
+      scripting: 'Scripting',
+      inspector: 'Inspector',
+      'ai-assistant': 'AI Assistant',
+    }
+    for (const widget of Object.values(dockedWidgets)) {
+      const label = WIDGET_LABELS[widget.id] ?? widget.id
+      items.push({ id: `tab-${widget.id}`, label, kind: 'active-tab', category: 'active-tab' })
+    }
+    // Docs — README & guides and planning
+    items.push(...MENTION_READMES)
+    items.push(...MENTION_PLANS)
     return items
-  }, [collaborators, gameObjects, rootObjectIds])
+  }, [dockedWidgets, gameObjects, rootObjectIds])
   const isBackgroundTaskRunning = useBackgroundTaskStore((s) => s.tasks.some((t) => t.status === 'running'))
   const activeConversationId = useConversationStore((s) => s.activeConversationId)
 
@@ -134,6 +143,115 @@ export function AIAssistant() {
   const [questionSegments, setQuestionSegments] = useState<InputSegment[]>([])
   const questionSegmentsRef = useRef<InputSegment[]>([])
 
+  // Demo simulation state
+  const [isDemoLoading, setIsDemoLoading] = useState(false)
+  const [demoStreamingText, setDemoStreamingText] = useState('')
+  const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const demoThinkingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const demoSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const stopDemo = useCallback(() => {
+    if (demoThinkingRef.current) { clearTimeout(demoThinkingRef.current); demoThinkingRef.current = null }
+    if (demoTimerRef.current) { clearInterval(demoTimerRef.current); demoTimerRef.current = null }
+    if (demoSettleRef.current) { clearTimeout(demoSettleRef.current); demoSettleRef.current = null }
+    setIsDemoLoading(false)
+    setDemoStreamingText('')
+  }, [])
+
+  // Clear any pending demo timers on unmount so callbacks don't fire after teardown
+  useEffect(() => {
+    return () => {
+      if (demoThinkingRef.current) clearTimeout(demoThinkingRef.current)
+      if (demoTimerRef.current) clearInterval(demoTimerRef.current)
+      if (demoSettleRef.current) clearTimeout(demoSettleRef.current)
+    }
+  }, [])
+
+  const DEMO_RESPONSE = `I'll help you build a fun obby course! **Setting up the base layout** now.\n\nI've added a spawn platform, 3 floating jump pads at staggered heights, and a checkpoint midway through. Each BasePart uses a bright color so players can easily track their path. The course should take about 60–90 seconds to complete on a first run.`
+
+  const DEMO_TOOL_CALLS = [
+    { toolName: 'addObject', args: { type: 'BasePart', name: 'Platform_1', color: '#FF6B6B' }, result: { success: true, objectId: 'obj-p1' } },
+    { toolName: 'addObject', args: { type: 'BasePart', name: 'Platform_2', color: '#4ECDC4' }, result: { success: true, objectId: 'obj-p2' } },
+    { toolName: 'addObject', args: { type: 'BasePart', name: 'Platform_3', color: '#FFE66D' }, result: { success: true, objectId: 'obj-p3' } },
+  ]
+
+  const runDemo = useCallback(() => {
+    if (isDemoLoading) return
+    const convStore = useConversationStore.getState()
+    const convId = convStore.activeConversationId
+    if (!convId) return
+
+    // Add user message
+    convStore.addMessage(convId, {
+      id: `user-demo-${Date.now()}`,
+      role: 'user',
+      textContent: 'Build a fun obby course with platforms',
+      timestamp: Date.now(),
+    })
+
+    setIsDemoLoading(true)
+    setDemoStreamingText('')
+
+    const words = DEMO_RESPONSE.split(' ')
+    let wordIndex = 0
+    const WORD_DELAY_MS = 60
+
+    // Start streaming after a brief thinking pause
+    demoThinkingRef.current = setTimeout(() => {
+      demoThinkingRef.current = null
+      demoTimerRef.current = setInterval(() => {
+        wordIndex++
+        setDemoStreamingText(words.slice(0, wordIndex).join(' '))
+        if (wordIndex >= words.length) {
+          if (demoTimerRef.current) { clearInterval(demoTimerRef.current); demoTimerRef.current = null }
+          // Commit the final assistant message + spawn real objects in viewport
+          demoSettleRef.current = setTimeout(() => {
+            demoSettleRef.current = null
+
+            // Spawn actual objects in the viewport so the new (no-explosion) behavior is visible
+            const editorStore = useEditorStore.getState()
+            const workspaceId = editorStore.rootObjectIds[0]
+            if (workspaceId) {
+              const colors = ['#FF6B6B', '#4ECDC4', '#FFE66D']
+              const positions: [number, number, number][] = [[-3, 0.5, 0], [0, 0.5, 0], [3, 0.5, 0]]
+              positions.forEach(([px, py, pz], i) => {
+                editorStore.createAndConfigureObject(
+                  'mesh',
+                  `Platform_${i + 1}`,
+                  workspaceId,
+                  {
+                    primitiveType: 'box',
+                    color: colors[i],
+                    transform: {
+                      position: { x: px, y: py, z: pz },
+                      rotation: { x: 0, y: 0, z: 0 },
+                      scale: { x: 2, y: 0.4, z: 2 },
+                    },
+                  },
+                )
+              })
+            }
+
+            convStore.addMessage(convId, {
+              id: `assistant-demo-${Date.now()}`,
+              role: 'assistant',
+              textContent: DEMO_RESPONSE,
+              toolCalls: DEMO_TOOL_CALLS.map((tc, i) => ({
+                toolCallId: `tc-demo-${Date.now()}-${i}`,
+                toolName: tc.toolName,
+                args: tc.args,
+                result: tc.result,
+              })),
+              timestamp: Date.now(),
+            })
+            setIsDemoLoading(false)
+            setDemoStreamingText('')
+          }, 400)
+        }
+      }, WORD_DELAY_MS)
+    }, 1500)
+  }, [isDemoLoading, DEMO_RESPONSE, DEMO_TOOL_CALLS])
+
   // Feedback takeover state
   const [feedbackTarget, setFeedbackTarget] = useState<{ messageId: string; type: 'up' | 'down' } | null>(null)
   const [feedbackText, setFeedbackText] = useState('')
@@ -144,7 +262,6 @@ export function AIAssistant() {
   const [pendingFiles, setPendingFiles] = useState<{ file: File; dataUrl: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
-  const [taskSubmenuOpen, setTaskSubmenuOpen] = useState(false)
   const plusButtonRef = useRef<HTMLButtonElement>(null)
   const plusMenuRef = useRef<HTMLDivElement>(null)
   const [plusMenuPos, setPlusMenuPos] = useState<{ left: number; bottom: number } | null>(null)
@@ -163,7 +280,6 @@ export function AIAssistant() {
         plusButtonRef.current && !plusButtonRef.current.contains(e.target as Node)
       ) {
         setPlusMenuOpen(false)
-        setTaskSubmenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -283,8 +399,8 @@ export function AIAssistant() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Loading state — all processing is now synchronous via keyword engine
-  const isLoading = isBackgroundTaskRunning
+  // Loading state — background tasks + demo simulation
+  const isLoading = isBackgroundTaskRunning || isDemoLoading
 
   // Classification in use-background-task-runner now handles expand/collapse decisions
 
@@ -295,6 +411,13 @@ export function AIAssistant() {
   const doSubmit = () => {
     const text = pillInputRef.current?.getTextContent()?.trim() ?? ''
     if ((!text && pendingFiles.length === 0) || isLoading) return
+
+    // Demo simulation
+    if (text === '/demo') {
+      setSegments([])
+      runDemo()
+      return
+    }
 
     // Check if any collaborator pills are present → route to comments thread
     const collabPills = segments.filter(
@@ -326,13 +449,6 @@ export function AIAssistant() {
     useEditorStore.getState().selectObject(null)
     useEditorStore.getState().selectAsset(null)
 
-    // Switch conversation based on dropdown selection
-    if (pendingConvId === NEW_CHAT_SENTINEL) {
-      useConversationStore.getState().createConversation()
-    } else if (pendingConvId) {
-      useConversationStore.getState().switchConversation(pendingConvId)
-    }
-
     // Save user message to the active conversation
     const convStore = useConversationStore.getState()
     const targetConvId = convStore.activeConversationId
@@ -357,7 +473,6 @@ export function AIAssistant() {
     // Route through background task store → keyword engine (pass conversationId so response is saved)
     enqueueTask(commandText, targetConvId ?? undefined)
     setPendingFiles([])
-    setPendingConvId(null)
 
     setSegments([])
     if (activeConversationId) {
@@ -479,34 +594,6 @@ export function AIAssistant() {
                   >
                     Add files or photos
                   </button>
-                  <div
-                    className={styles.plusMenuSubmenuTrigger}
-                    onMouseEnter={() => setTaskSubmenuOpen(true)}
-                    onMouseLeave={() => setTaskSubmenuOpen(false)}
-                  >
-                    <button
-                      type="button"
-                      className={`${styles.plusMenuOption} ${styles.plusMenuOptionWithChevron}`}
-                      onClick={() => setTaskSubmenuOpen(!taskSubmenuOpen)}
-                    >
-                      Add to task
-                      <ChevronRight size={12} className={styles.plusMenuChevron} />
-                    </button>
-                    {taskSubmenuOpen && (
-                      <div className={styles.plusSubmenu}>
-                        {useConversationStore.getState().listConversations().map((conv) => (
-                          <button
-                            key={conv.id}
-                            type="button"
-                            className={styles.plusMenuOption}
-                            onClick={() => { setPlusMenuOpen(false); setTaskSubmenuOpen(false) }}
-                          >
-                            {truncateTitle(conv.summary || conv.title)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -555,19 +642,19 @@ export function AIAssistant() {
                 ))}
               </div>
             )}
-            <ViewportChatDropdown selectedId={pendingConvId} onSelect={handleChatSelect} />
             <div className={styles.collapsedInputRow2Spacer} aria-hidden />
-            <AgentDropdown selectedId={selectedAgent} onSelect={handleAgentSelect} />
-            <button
-              type="button"
-              className={styles.collapsedInputTrailingButton}
-              onClick={handleSubmit}
-              disabled={!hasText || isLoading}
-              title="Send message"
-              aria-label="Send message"
-            >
-              <ArrowUp size={16} />
-            </button>
+            <div className={styles.sendGroup}>
+              <button
+                type="button"
+                className={styles.collapsedInputTrailingButton}
+                onClick={isDemoLoading ? stopDemo : handleSubmit}
+                disabled={isDemoLoading ? false : (!hasText || isLoading)}
+                title={isDemoLoading ? 'Stop simulation' : 'Send message'}
+                aria-label={isDemoLoading ? 'Stop simulation' : 'Send message'}
+              >
+                {isDemoLoading ? <X size={16} /> : <ArrowUp size={16} />}
+              </button>
+            </div>
           </div>
         </div>
         {/* Hidden file input */}
@@ -1049,70 +1136,35 @@ export function AIAssistant() {
     useDockingStore.getState().setAiSidebarOpen(shouldBeOpen)
   }, [rightPanelWidth, assistantPanelMode])
 
-  const panelIcon =
-    chatbotUIMode === 'sidenav'
-      ? <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            useDockingStore.getState().toggleAiSidebar()
-          }}
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-          title="Toggle sidebar"
-          aria-label="Toggle sidebar"
-        >
-          <img src={publicUrl('icons/sidebar.svg')} alt="" width={16} height={16} aria-hidden />
-        </button>
-      : isAboveComposer || chatbotUIMode === 'queue'
-        ? undefined
-        : <img src={publicUrl('icons/task-white.svg')} alt="" width={16} height={16} aria-hidden />
+  const sidenavSidebarToggleEl =
+    chatbotUIMode === 'sidenav' ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          useDockingStore.getState().toggleAiSidebar()
+        }}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        title="Toggle sidebar"
+        aria-label="Toggle sidebar"
+      >
+        <img src={publicUrl('icons/sidebar.svg')} alt="" width={16} height={16} aria-hidden />
+      </button>
+    ) : undefined
 
   const tasksDropdownEl = showTasksDropdown && chatbotUIMode !== 'tabs' && chatbotUIMode !== 'sidenav' ? <TasksDropdown hideTriggerIcon={isAboveComposer} /> : undefined
 
-  // Only show the "Float panel" button while docked — when floating,
-  // the header is already draggable to any edge zone to re-dock.
-  const panelModeToggleEl = assistantPanelMode === 'right' ? (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        useDockingStore.getState().setAssistantPanelMode('menu')
-      }}
-      style={{
-        background: 'none',
-        border: 'none',
-        padding: 4,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        color: 'var(--content-muted)',
-        borderRadius: 4,
-      }}
-      title="Float panel"
-      aria-label="Float panel"
-    >
-      <PictureInPicture2 size={14} />
-    </button>
-  ) : null
-
-  const rightActionsEl = (
-    <>
-      {panelModeToggleEl}
-      {taskDrawerMenuSide === 'right' ? tasksDropdownEl : null}
-    </>
-  )
+  const rightActionsEl = taskDrawerMenuSide === 'right' ? tasksDropdownEl : undefined
 
   return (
     <DockablePanel
       widgetId="ai-assistant"
       title="Assistant"
-      icon={panelIcon}
-      titleLeading={taskDrawerMenuSide === 'left' ? tasksDropdownEl : undefined}
+      titleLeading={sidenavSidebarToggleEl ?? (taskDrawerMenuSide === 'left' ? tasksDropdownEl : undefined)}
       titleTrailing={taskDrawerMenuSide === 'center' ? tasksDropdownEl : undefined}
       headerCenterTitle={!isAboveComposer && taskDrawerMenuSide === 'center' && chatbotUIMode !== 'tabs'}
       headerTitleFirst={isAboveComposer || taskDrawerMenuSide === 'left' || taskDrawerMenuSide === 'right' || chatbotUIMode === 'tabs'}
       actions={rightActionsEl}
-      headerMiddle={chatbotUIMode === 'tabs' ? <ConversationSwitcher /> : undefined}
       bodyCollapsed={aiAssistantBodyCollapsed}
       collapsedShowsMinimalContent
       hideHeaderWhenCollapsed
@@ -1131,30 +1183,38 @@ export function AIAssistant() {
             <div className={styles.mainContentColumn}>
               <div className={styles.mainContent}>
                 <MessageList
-                  messages={conversationMessages.map((m) => ({
-                    id: m.id,
-                    role: m.role,
-                    parts: [
-                      ...(m.textContent ? [{ type: 'text' as const, text: m.textContent }] : []),
-                      ...(m.toolCalls ?? []).map((tc) => ({
-                        type: `tool-${tc.toolName}` as const,
-                        toolCallId: tc.toolCallId ?? `tc-${m.id}-${tc.toolName}`,
-                        toolName: tc.toolName,
-                        state: 'output-available' as const,
-                        input: tc.args ?? {},
-                        output: tc.result,
-                      })),
-                    ],
-                  }))}
+                  messages={[
+                    ...conversationMessages.map((m) => ({
+                      id: m.id,
+                      role: m.role,
+                      parts: [
+                        ...(m.textContent ? [{ type: 'text' as const, text: m.textContent }] : []),
+                        ...(m.toolCalls ?? []).map((tc) => ({
+                          type: `tool-${tc.toolName}` as const,
+                          toolCallId: tc.toolCallId ?? `tc-${m.id}-${tc.toolName}`,
+                          toolName: tc.toolName,
+                          state: 'output-available' as const,
+                          input: tc.args ?? {},
+                          output: tc.result,
+                        })),
+                      ],
+                    })),
+                    // Inject streaming demo message while simulation is running
+                    ...(isDemoLoading && demoStreamingText ? [{
+                      id: 'demo-streaming',
+                      role: 'assistant' as const,
+                      parts: [{ type: 'text' as const, text: demoStreamingText }],
+                    }] : []),
+                  ]}
                   isLoading={isLoading || questionThinking}
                   pendingToolCount={questionThinking ? 0 : pendingToolCount}
-                  onFeedback={assistantPanelMode === 'right' ? undefined : (messageId, type) => {
+                  onFeedback={(messageId, type) => {
                     setFeedbackTarget({ messageId, type })
                     setFeedbackText('')
                     setFeedbackIssueType('')
                     setFeedbackIssueDropdownOpen(false)
                   }}
-                  inlineFeedback={assistantPanelMode === 'right'}
+                  inlineFeedback={false}
                 />
                 {/* When not clarifying: plan card in main flow; when clarifying: moved to lower half */}
                 {/* Skip standalone card when a conversation message already renders this plan */}
@@ -1171,83 +1231,98 @@ export function AIAssistant() {
                 {chatbotUIMode !== 'queue' && chatbotUIMode !== 'sidenav' && <BackgroundTaskDrawer />}
               </div>
               {feedbackTarget ? (
-                <div className={styles.feedbackComposer}>
-                  <div className={styles.feedbackComposerBody}>
-                    <div className={styles.feedbackComposerTitle}>
-                      {feedbackTarget.type === 'up' ? 'Give positive feedback' : 'Give negative feedback'}
-                    </div>
-                    {feedbackTarget.type === 'down' && (
-                      <>
-                        <div className={styles.feedbackComposerLabel}>What type of issue did you encounter? (optional)</div>
-                        <div className={styles.feedbackSelectWrap}>
+                <div className={styles.feedbackComposerLower}>
+                  <div className={styles.feedbackComposer}>
+                    <div className={styles.feedbackComposerBody}>
+                      <div className={styles.questionHeader}>
+                        <div className={styles.questionHeaderLabel}>
+                          {feedbackTarget.type === 'up' ? 'Give positive feedback' : 'Give negative feedback'}
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.questionHeaderCloseButton}
+                          onClick={() => { setFeedbackTarget(null); setFeedbackText(''); setFeedbackIssueType('') }}
+                          aria-label="Dismiss feedback"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <div className={styles.feedbackComposerBodyContent}>
+                        {feedbackTarget.type === 'down' && (
+                          <>
+                            <div className={styles.feedbackComposerLabel}>What type of issue did you encounter? (optional)</div>
+                            <div className={styles.feedbackSelectWrap}>
+                              <button
+                                type="button"
+                                className={styles.feedbackSelectTrigger}
+                                onClick={() => setFeedbackIssueDropdownOpen(!feedbackIssueDropdownOpen)}
+                              >
+                                <span className={feedbackIssueType ? styles.feedbackSelectValue : styles.feedbackSelectPlaceholder}>
+                                  {feedbackIssueType || 'Select an Option'}
+                                </span>
+                                <ChevronDown size={12} className={styles.feedbackSelectChevron} />
+                              </button>
+                              {feedbackIssueDropdownOpen && (
+                                <div className={styles.feedbackSelectMenu}>
+                                  {['Incorrect information', 'Not helpful', 'Incomplete response', 'Other'].map((opt) => (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      className={`${styles.feedbackSelectOption} ${feedbackIssueType === opt ? styles.feedbackSelectOptionSelected : ''}`}
+                                      onClick={() => { setFeedbackIssueType(opt); setFeedbackIssueDropdownOpen(false) }}
+                                    >
+                                      {opt}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                        <div className={styles.feedbackComposerLabel}>Please provide details (optional)</div>
+                        <textarea
+                          className={styles.feedbackComposerTextarea}
+                          placeholder={feedbackTarget.type === 'up'
+                            ? 'What was satisfying about this response?'
+                            : 'What was unsatisfying about this response?'}
+                          value={feedbackText}
+                          onChange={(e) => setFeedbackText(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              setFeedbackTarget(null)
+                              setFeedbackText('')
+                              setFeedbackIssueType('')
+                            }
+                            if (e.key === 'Escape') {
+                              setFeedbackTarget(null)
+                              setFeedbackText('')
+                              setFeedbackIssueType('')
+                            }
+                          }}
+                        />
+                        <div className={styles.feedbackComposerActions}>
                           <button
                             type="button"
-                            className={styles.feedbackSelectTrigger}
-                            onClick={() => setFeedbackIssueDropdownOpen(!feedbackIssueDropdownOpen)}
+                            className={styles.feedbackComposerDismiss}
+                            onClick={() => { setFeedbackTarget(null); setFeedbackText(''); setFeedbackIssueType('') }}
                           >
-                            <span className={feedbackIssueType ? styles.feedbackSelectValue : styles.feedbackSelectPlaceholder}>
-                              {feedbackIssueType || 'Select an Option'}
-                            </span>
-                            <ChevronDown size={12} className={styles.feedbackSelectChevron} />
+                            Dismiss
                           </button>
-                          {feedbackIssueDropdownOpen && (
-                            <div className={styles.feedbackSelectMenu}>
-                              {['Incorrect information', 'Not helpful', 'Incomplete response', 'Other'].map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  className={`${styles.feedbackSelectOption} ${feedbackIssueType === opt ? styles.feedbackSelectOptionSelected : ''}`}
-                                  onClick={() => { setFeedbackIssueType(opt); setFeedbackIssueDropdownOpen(false) }}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          <button
+                            type="button"
+                            className={styles.feedbackComposerSubmit}
+                            onClick={() => { setFeedbackTarget(null); setFeedbackText(''); setFeedbackIssueType('') }}
+                          >
+                            Submit <span className={styles.feedbackSubmitKbd}>(&#x23CE;)</span>
+                          </button>
                         </div>
-                      </>
-                    )}
-                    <div className={styles.feedbackComposerLabel}>Please provide details (optional)</div>
-                    <textarea
-                      className={styles.feedbackComposerTextarea}
-                      placeholder={feedbackTarget.type === 'up'
-                        ? 'What was satisfying about this response?'
-                        : 'What was unsatisfying about this response?'}
-                      value={feedbackText}
-                      onChange={(e) => setFeedbackText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          setFeedbackTarget(null)
-                          setFeedbackText('')
-                          setFeedbackIssueType('')
-                        }
-                        if (e.key === 'Escape') {
-                          setFeedbackTarget(null)
-                          setFeedbackText('')
-                          setFeedbackIssueType('')
-                        }
-                      }}
-                    />
-                    <div className={styles.feedbackComposerActions}>
-                      <button
-                        type="button"
-                        className={styles.feedbackComposerDismiss}
-                        onClick={() => { setFeedbackTarget(null); setFeedbackText(''); setFeedbackIssueType('') }}
-                      >
-                        Dismiss
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.feedbackComposerSubmit}
-                        onClick={() => { setFeedbackTarget(null); setFeedbackText(''); setFeedbackIssueType('') }}
-                      >
-                        Submit <span style={{ opacity: 0.6, fontSize: 10 }}>(&#x23CE;)</span>
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className={styles.feedbackComposerFooter}>
-                    This report will include the entire conversation for context and future improvements.
+                    <div className={styles.feedbackComposerFooter}>
+                      This report will include the entire conversation for context and future improvements.
+                    </div>
                   </div>
                 </div>
               ) : isClarifying && !questionThinking ? (

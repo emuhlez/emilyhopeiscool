@@ -18,7 +18,6 @@ function saveTaskToConversation(
 ): string {
   const convStore = useConversationStore.getState()
 
-  // If the user message was already added to an existing conversation, just append the response
   if (existingConvId && convStore.conversations[existingConvId]) {
     if (responseText || toolCalls?.length) {
       convStore.addMessage(existingConvId, {
@@ -32,7 +31,6 @@ function saveTaskToConversation(
     return existingConvId
   }
 
-  // No existing conversation — create a new one with both user + assistant messages
   const cleanCommand = stripLeadingBrackets(command)
   const title = cleanCommand.slice(0, 40) + (cleanCommand.length > 40 ? '...' : '')
   const convId = convStore.createConversation(title)
@@ -73,7 +71,6 @@ export function useBackgroundTaskRunner() {
 
   const hasRunning = tasks.some((t) => t.status === 'running')
 
-  // Pick up next pending task and process it locally
   useEffect(() => {
     if (runningRef.current) return
     const pending = useBackgroundTaskStore.getState().getNextPending()
@@ -82,7 +79,6 @@ export function useBackgroundTaskRunner() {
     runningRef.current = true
     useBackgroundTaskStore.getState().startTask(pending.id)
 
-    // Build scene context from editor store
     const editorState = useEditorStore.getState()
     const sceneContext = {
       gameObjects: editorState.gameObjects,
@@ -91,7 +87,6 @@ export function useBackgroundTaskRunner() {
     }
 
     try {
-      // /plan command: route directly into plan mode with clarifying questions
       const planMatch = pending.command.match(/^\/?plan\s*(.*)/i)
       if (planMatch) {
         const prompt = planMatch[1]?.trim() || 'New project'
@@ -153,13 +148,11 @@ export function useBackgroundTaskRunner() {
         return
       }
 
-      // /generate, /generate_mesh, /generate_primitive commands: kick off Meshy generation
       const generateMatch = pending.command.match(/^\/?generate(?:_(mesh|primitive))?\s+([\s\S]+)/i)
       if (generateMatch) {
-        const variant = generateMatch[1]?.toLowerCase() // 'mesh' | 'primitive' | undefined
+        const variant = generateMatch[1]?.toLowerCase()
         let promptText = generateMatch[2]!.trim()
 
-        // Check for [IMAGE:data:...] prefix attached by the composer
         let imageDataUrl: string | undefined
         const imageMatch = promptText.match(/^\[IMAGE:(data:[^\]]+)\]\s*/)
         if (imageMatch) {
@@ -167,13 +160,11 @@ export function useBackgroundTaskRunner() {
           promptText = promptText.slice(imageMatch[0].length).trim() || 'Generate from image'
         }
 
-        // Map variant to Meshy model_type
-        // 'primitive' → lowpoly style, 'mesh' → detailed, default → default
+        // Map variant to Meshy model_type — both currently use default
         const modelType = variant === 'primitive' ? 'default' : 'default'
 
         const name = promptText.slice(0, 40)
 
-        // Fire-and-forget — the poller will track progress
         executeGenerateMesh({
           prompt: promptText,
           name,
@@ -185,7 +176,6 @@ export function useBackgroundTaskRunner() {
             `Starting generation: ${name}`,
             pending.conversationId,
           )
-          // The Meshy task is already running via addRunningTask — dismiss the original task
           useBackgroundTaskStore.getState().dismissTask(pending.id)
         }).catch((err) => {
           console.error('[BackgroundTaskRunner] generate error:', err)
@@ -203,7 +193,6 @@ export function useBackgroundTaskRunner() {
       const result = processCommand(pending.command, sceneContext)
 
       if (result.isPlan && result.plan) {
-        // Questions flow: show clarifying questions first, then transition to todos
         if (result.isQuestions && result.plan.questions?.length) {
           const planToolCall = {
             toolName: 'createPlan',
@@ -222,7 +211,6 @@ export function useBackgroundTaskRunner() {
           useBackgroundTaskStore.getState().dismissTask(pending.id)
           useDockingStore.getState().setAiAssistantBodyCollapsed(false)
         } else {
-          // No questions — show todos directly
           const planToolCall = {
             toolName: 'createPlan',
             toolCallId: result.plan.id,
@@ -241,7 +229,6 @@ export function useBackgroundTaskRunner() {
           useDockingStore.getState().setAiAssistantBodyCollapsed(false)
         }
       } else {
-        // Execute tool calls directly
         const executedToolCalls: { toolName: string; args: Record<string, unknown> }[] = []
         for (const tc of result.toolCalls) {
           try {
@@ -252,7 +239,6 @@ export function useBackgroundTaskRunner() {
           }
         }
 
-        // Save assistant response to the conversation
         if (pending.conversationId) {
           saveTaskToConversation(
             pending.command,
@@ -281,10 +267,7 @@ export function useBackgroundTaskRunner() {
     clearGeneratingIfIdle()
   }, [tasks])
 
-  // Watch for task cancellation
   useEffect(() => {
-    // Cancellation is handled synchronously now (no streaming to stop),
-    // but clear generating indicators when a task is cancelled
     const cancelled = tasks.find((t) => t.status === 'error' && t.error === 'Cancelled by user')
     if (cancelled) {
       clearGeneratingIfIdle()

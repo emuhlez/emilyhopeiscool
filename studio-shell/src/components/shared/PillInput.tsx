@@ -40,7 +40,15 @@ const PILL_ICONS: Record<string, string> = {
   assetType: BOX_SVG,
   collaborator: USER_SVG,
   tool: WRENCH_SVG,
+  script: FILECODE_SVG,
   scripting: FILECODE_SVG,
+}
+
+/** Pill kinds that use a public image file instead of an inline SVG icon */
+const PILL_KIND_ICON_PATH: Record<string, string> = {
+  doc: 'ribbon-icons/file.svg',
+  readme: 'ribbon-icons/file.svg',
+  plan: 'ribbon-icons/file.svg',
 }
 
 /** Map objectType to public icon path for scene-object pills */
@@ -57,6 +65,9 @@ const OBJECT_TYPE_ICON_PATH: Record<string, string> = {
 const OBJECT_TYPE_INLINE_SVG: Record<string, string> = {
   script: FILECODE_SVG,
 }
+
+/** Mention kinds (inserted via @) that show no leading icon — keeps the pill compact */
+const NO_ICON_KINDS = new Set<PillKind>(['folder', 'active-tab'])
 
 function parseDOM(el: HTMLDivElement): InputSegment[] {
   const segments: InputSegment[] = []
@@ -98,7 +109,7 @@ function createPillElement(id: string, label: string, kind: PillKind = 'object',
   span.dataset.pillKind = kind
   if (objectType) span.dataset.pillObjectType = objectType
 
-  if (kind !== 'command') {
+  if (kind !== 'command' && !NO_ICON_KINDS.has(kind)) {
     const iconSpan = document.createElement('span')
     iconSpan.style.display = 'inline-flex'
     iconSpan.style.alignItems = 'center'
@@ -119,6 +130,13 @@ function createPillElement(id: string, label: string, kind: PillKind = 'object',
       // Default: use model.svg for scene objects without a specific icon
       const img = document.createElement('img')
       img.src = publicUrl('icons/model.svg')
+      img.alt = ''
+      img.width = 12
+      img.height = 12
+      iconSpan.appendChild(img)
+    } else if (PILL_KIND_ICON_PATH[kind]) {
+      const img = document.createElement('img')
+      img.src = publicUrl(PILL_KIND_ICON_PATH[kind])
       img.alt = ''
       img.width = 12
       img.height = 12
@@ -228,6 +246,36 @@ function clearPillKeyedState(editor: HTMLElement) {
   editor.querySelectorAll<HTMLElement>('[data-pill-id]').forEach((p) => p.removeAttribute('data-keyed'))
 }
 
+/**
+ * Place the cursor just after `node` inside a text node so typing works immediately.
+ *
+ * Positioning the cursor with `setStartAfter(pillEl)` leaves it at an element-level
+ * offset in the parent. WebKit won't accept keystrokes there when the adjacent node
+ * is `contentEditable="false"`. Placing the cursor inside a real text node fixes this.
+ */
+function placeCursorAfterNode(node: Node, sel: Selection) {
+  const parent = node.parentNode
+  if (!parent) return
+  const next = node.nextSibling
+  const range = document.createRange()
+  if (next && next.nodeType === Node.TEXT_NODE) {
+    // Existing text node — land at its start
+    range.setStart(next, 0)
+  } else {
+    // No text node follows — insert a non-breaking space so there's a landing spot
+    const spaceNode = document.createTextNode('\u00A0')
+    if (next) {
+      parent.insertBefore(spaceNode, next)
+    } else {
+      parent.appendChild(spaceNode)
+    }
+    range.setStart(spaceNode, 1)
+  }
+  range.collapse(true)
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
 export function getTextFromSegments(segments: InputSegment[]): string {
   return segments
     .map((s) => (s.type === 'text' ? s.text : s.label))
@@ -245,6 +293,8 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
   const segmentsRef = useRef(segments)
   segmentsRef.current = segments
   const mentionQueryRef = useRef<MentionQuery | null>(null)
+  /** Caret span over the active @mention in the text node (start = '@', end = query end). Used when selection is lost after clicking a portaled mention menu. */
+  const mentionReplaceRangeRef = useRef<Range | null>(null)
   /** True only after Arrow/Backspace/Delete — highlight pill at caret only then */
   const keyNavigationRef = useRef(false)
 
@@ -256,6 +306,7 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
 
       const sel = window.getSelection()
       let insertAtEnd = true
+      let lastPillEl: HTMLSpanElement | null = null
 
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0)
@@ -263,29 +314,26 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
         if (el.contains(range.commonAncestorContainer)) {
           range.collapse(false) // collapse to end of selection
           for (const pill of pills) {
-            const pillEl = createPillElement(pill.id, pill.label, pill.kind ?? 'object', pill.objectType)
-            range.insertNode(pillEl)
-            // Move cursor after the pill
-            range.setStartAfter(pillEl)
+            lastPillEl = createPillElement(pill.id, pill.label, pill.kind ?? 'object', pill.objectType)
+            range.insertNode(lastPillEl)
+            // Advance range past the pill so the next pill inserts after it
+            range.setStartAfter(lastPillEl)
             range.collapse(true)
           }
-          sel.removeAllRanges()
-          sel.addRange(range)
+          // Land cursor inside a text node so typing works immediately
+          if (lastPillEl) placeCursorAfterNode(lastPillEl, sel)
           insertAtEnd = false
         }
       }
 
       if (insertAtEnd) {
         for (const pill of pills) {
-          el.appendChild(createPillElement(pill.id, pill.label, pill.kind ?? 'object', pill.objectType))
+          lastPillEl = createPillElement(pill.id, pill.label, pill.kind ?? 'object', pill.objectType)
+          el.appendChild(lastPillEl)
         }
-        // Place cursor at end
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        range.collapse(false)
+        // Land cursor inside a text node so typing works immediately
         const sel2 = window.getSelection()
-        sel2?.removeAllRanges()
-        sel2?.addRange(range)
+        if (sel2 && lastPillEl) placeCursorAfterNode(lastPillEl, sel2)
       }
 
       // Parse DOM back to segments
@@ -296,50 +344,73 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
     replaceMentionWithPill(pill) {
       const el = editorRef.current
       if (!el) return
-      const sel = window.getSelection()
-      if (!sel || sel.rangeCount === 0) return
-      const range = sel.getRangeAt(0)
-      let textNode: Node = range.startContainer
-      let cursorPos = range.startOffset
-      // Resolve element-level container to text node
-      if (textNode.nodeType !== Node.TEXT_NODE) {
-        const children = textNode.childNodes
-        if (cursorPos > 0 && children[cursorPos - 1]?.nodeType === Node.TEXT_NODE) {
-          textNode = children[cursorPos - 1]
-          cursorPos = textNode.textContent?.length ?? 0
-        } else if (children[cursorPos]?.nodeType === Node.TEXT_NODE) {
-          textNode = children[cursorPos]
-          cursorPos = 0
-        } else {
-          return
+
+      interface ResolvedMention {
+        textNode: Text
+        atIdx: number
+        cursorPos: number
+      }
+
+      let resolved: ResolvedMention | null = null
+      const saved = mentionReplaceRangeRef.current
+      if (
+        saved &&
+        saved.startContainer.nodeType === Node.TEXT_NODE &&
+        saved.startContainer === saved.endContainer &&
+        el.contains(saved.startContainer)
+      ) {
+        const tn = saved.startContainer as Text
+        const t = tn.textContent ?? ''
+        const s = saved.startOffset
+        const e = saved.endOffset
+        if (s >= 0 && e >= s && e <= t.length && t.charAt(s) === '@') {
+          resolved = { textNode: tn, atIdx: s, cursorPos: e }
         }
       }
-      if (!el.contains(textNode)) return
+
+      if (!resolved) {
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0) return
+        const range = sel.getRangeAt(0)
+        let textNode: Node = range.startContainer
+        let cursorPos = range.startOffset
+        if (textNode.nodeType !== Node.TEXT_NODE) {
+          const children = textNode.childNodes
+          if (cursorPos > 0 && children[cursorPos - 1]?.nodeType === Node.TEXT_NODE) {
+            textNode = children[cursorPos - 1]
+            cursorPos = textNode.textContent?.length ?? 0
+          } else if (children[cursorPos]?.nodeType === Node.TEXT_NODE) {
+            textNode = children[cursorPos]
+            cursorPos = 0
+          } else {
+            return
+          }
+        }
+        if (!el.contains(textNode)) return
+        const text = (textNode as Text).textContent ?? ''
+        const before = text.slice(0, cursorPos)
+        const atIdx = before.lastIndexOf('@')
+        if (atIdx === -1) return
+        resolved = { textNode: textNode as Text, atIdx, cursorPos }
+      }
+
+      const { textNode, atIdx, cursorPos } = resolved
       const text = textNode.textContent ?? ''
-      // Find the @ before the cursor
-      const before = text.slice(0, cursorPos)
-      const atIdx = before.lastIndexOf('@')
-      if (atIdx === -1) return
-      // Split: text before @, text after query
       const beforeAt = text.slice(0, atIdx)
       const afterQuery = text.slice(cursorPos)
       const parent = textNode.parentNode!
-      // Remove the text node and insert: beforeText + pill + afterText
       const pillEl = createPillElement(pill.id, pill.label, pill.kind ?? 'collaborator', pill.objectType)
       if (afterQuery) parent.insertBefore(document.createTextNode(afterQuery), textNode.nextSibling)
       parent.insertBefore(pillEl, textNode.nextSibling)
       if (beforeAt) parent.insertBefore(document.createTextNode(beforeAt), pillEl)
       parent.removeChild(textNode)
-      // Place cursor after the pill
-      const newRange = document.createRange()
-      newRange.setStartAfter(pillEl)
-      newRange.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(newRange)
-      // Sync segments
+      el.focus()
+      const sel = window.getSelection()
+      if (sel) placeCursorAfterNode(pillEl, sel)
       const newSegments = parseDOM(el)
       isInternalChange.current = true
       onSegmentsChange(newSegments)
+      mentionReplaceRangeRef.current = null
       mentionQueryRef.current = null
       onMentionQueryRef.current?.(null)
     },
@@ -438,15 +509,25 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
   // stale dropdown open even though no `@` or `/` is present.
   useEffect(() => {
     const hasTriggerChar = (trigger: '@' | '/') => {
-      for (const seg of segments) {
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i]
         if (seg.type !== 'text') continue
-        const re = trigger === '@' ? /(^|\s)@[^\s]*$/ : /(^|\s)\/[^\s]*$/
-        if (re.test(seg.text)) return true
+        if (trigger === '@') {
+          if (/(^|\s)@[^\s]*$/.test(seg.text)) return true
+        } else {
+          // Slash commands only valid when / is at the very start of the composer
+          // (no pills or non-empty text segments before this one)
+          const nothingBefore = segments.slice(0, i).every(
+            (s) => s.type === 'text' && s.text.trim() === ''
+          )
+          if (nothingBefore && /^\/[^\s]*$/.test(seg.text.trimStart())) return true
+        }
       }
       return false
     }
     if (mentionQueryRef.current && !hasTriggerChar('@')) {
       mentionQueryRef.current = null
+      mentionReplaceRangeRef.current = null
       onMentionQueryRef.current?.(null)
     }
     if (slashQueryRef.current && !hasTriggerChar('/')) {
@@ -512,6 +593,7 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) {
         if (mentionQueryRef.current) { mentionQueryRef.current = null; cb(null) }
+        mentionReplaceRangeRef.current = null
         return
       }
 
@@ -531,12 +613,14 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
           cursorPos = 0
         } else {
           if (mentionQueryRef.current) { mentionQueryRef.current = null; cb(null) }
+          mentionReplaceRangeRef.current = null
           return
         }
       }
 
       if (!textNode) {
         if (mentionQueryRef.current) { mentionQueryRef.current = null; cb(null) }
+        mentionReplaceRangeRef.current = null
         return
       }
 
@@ -545,14 +629,16 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
       const match = before.match(/(^|[\s])@([^\s]*)$/)
       if (!match) {
         if (mentionQueryRef.current) { mentionQueryRef.current = null; cb(null) }
+        mentionReplaceRangeRef.current = null
         return
       }
       const query = match[2]
       const atOffset = before.lastIndexOf('@')
-      const range = document.createRange()
-      range.setStart(textNode, atOffset)
-      range.setEnd(textNode, cursorPos)
-      const rect = range.getBoundingClientRect()
+      const mentionRange = document.createRange()
+      mentionRange.setStart(textNode, atOffset)
+      mentionRange.setEnd(textNode, cursorPos)
+      mentionReplaceRangeRef.current = mentionRange.cloneRange()
+      const rect = mentionRange.getBoundingClientRect()
       const finalRect = (rect.width === 0 && rect.height === 0)
         ? new DOMRect(el.getBoundingClientRect().left, el.getBoundingClientRect().top, 1, 20)
         : rect
@@ -613,6 +699,25 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
       }
       const query = match[2]
       const slashOffset = before.lastIndexOf('/')
+
+      // Slash commands only trigger when / is the very first thing in the composer.
+      // Reject if there is non-whitespace text before the slash in this text node,
+      // or if any preceding sibling (pill, element, or non-empty text) exists.
+      const textBeforeSlash = text.slice(0, slashOffset)
+      if (textBeforeSlash.trim()) {
+        if (slashQueryRef.current) { slashQueryRef.current = null; cb(null) }
+        return
+      }
+      let prevSibling = textNode.previousSibling
+      while (prevSibling) {
+        const isElement = prevSibling.nodeType === Node.ELEMENT_NODE
+        const isNonEmptyText = prevSibling.nodeType === Node.TEXT_NODE && (prevSibling.textContent ?? '').trim() !== ''
+        if (isElement || isNonEmptyText) {
+          if (slashQueryRef.current) { slashQueryRef.current = null; cb(null) }
+          return
+        }
+        prevSibling = prevSibling.previousSibling
+      }
       const range = document.createRange()
       range.setStart(textNode, slashOffset)
       range.setEnd(textNode, cursorPos)
@@ -651,6 +756,7 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
     }
     if (e.key === 'Escape' && (mentionQueryRef.current || slashQueryRef.current)) {
       mentionQueryRef.current = null
+      mentionReplaceRangeRef.current = null
       onMentionQueryRef.current?.(null)
       slashQueryRef.current = null
       onSlashQueryRef.current?.(null)
@@ -659,6 +765,7 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       mentionQueryRef.current = null
+      mentionReplaceRangeRef.current = null
       onMentionQueryRef.current?.(null)
       slashQueryRef.current = null
       onSlashQueryRef.current?.(null)
@@ -734,6 +841,13 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
     }
   }, [suggestion, segments])
 
+  // Logically empty when no pills exist and all text segments are blank.
+  // Drives the placeholder visibility — `:empty` alone is unreliable because
+  // contenteditable retains stray <br> nodes after the user deletes content.
+  const isEmpty = segments.every(
+    (s) => s.type === 'text' && s.text.trim().length === 0,
+  )
+
   return (
     <div className={styles.editorWrap}>
       <div
@@ -745,6 +859,7 @@ export const PillInput = forwardRef<PillInputHandle, PillInputProps>(function Pi
         aria-label={ariaLabel}
         aria-multiline="true"
         data-placeholder={placeholder}
+        data-empty={isEmpty ? 'true' : undefined}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}

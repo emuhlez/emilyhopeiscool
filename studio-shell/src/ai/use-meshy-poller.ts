@@ -58,7 +58,6 @@ export function useMeshyPoller() {
           return
         }
 
-        // Still in progress — poll again
         setTimeout(poll, POLL_INTERVAL)
       } catch (err) {
         console.error('[MeshPoller] error:', err)
@@ -70,7 +69,6 @@ export function useMeshyPoller() {
       }
     }
 
-    // Start first poll after a short delay
     setTimeout(poll, POLL_INTERVAL)
   }
 
@@ -84,7 +82,6 @@ export function useMeshyPoller() {
       const blob = await res.blob()
       const blobUrl = URL.createObjectURL(blob)
 
-      // Create a GameObject with the mesh
       const editorStore = useEditorStore.getState()
       const workspaceId = editorStore.rootObjectIds[0]
       if (!workspaceId) {
@@ -104,7 +101,6 @@ export function useMeshyPoller() {
         name,
         workspaceId,
         updates,
-        { x: 0, y: 0, z: 0 },
       )
 
       useDockingStore.getState().setInspectorBodyCollapsed(false)

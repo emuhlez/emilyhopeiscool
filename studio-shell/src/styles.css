@@ -1,5 +1,63 @@
-/* AI Native Studio Styles */
-/* @font-face rules are injected dynamically by src/utils/loadFonts.ts */
+/* Studio Shell - Game Editor Styles */
+
+/* ========================================
+   BuilderSans Font Family
+   ======================================== */
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BuilderSans';
+  src: url('/fonts/BuilderSans-ExtraBold.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ========================================
    CSS Variables
@@ -20,7 +78,6 @@
   --content-muted: #BCBEC8;
   --content-link: #528BFF;
   --content-hover: rgba(208, 217, 251, 0.08);
-  --content-pressed: rgba(208, 217, 251, 0.12);
   
   /* Semantic colors */
   --color-success: #39C582;
@@ -120,13 +177,6 @@ body {
 :focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
-}
-
-button[class*="questionComposerActionButton"]:focus,
-button[class*="questionComposerActionButton"]:focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
-  box-shadow: none !important;
 }
 
 /* ========================================

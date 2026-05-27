@@ -1,9 +1,9 @@
 import { executeAddObject, type AddObjectArgs } from './tools/add-object'
-import { executeGenerateMesh, type GenerateMeshArgs } from './tools/generate-mesh'
 import { executeRemoveObject, type RemoveObjectArgs } from './tools/remove-object'
 import { executeTransformObject, type TransformObjectArgs } from './tools/transform-object'
 import { executeSetMaterial, type SetMaterialArgs } from './tools/set-material'
 import { executeCreateTerrain, type CreateTerrainArgs } from './tools/create-terrain'
+import { executeGenerateMesh, type GenerateMeshArgs } from './tools/generate-mesh'
 import { usePlanStore } from '../store/planStore'
 import type { PlanTodo, PlanQuestion } from '../types'
 
@@ -16,7 +16,7 @@ interface CreatePlanArgs {
 export function executeTool(
   toolName: string,
   args: Record<string, unknown>,
-  toolCallId?: string
+  toolCallId?: string,
 ): unknown {
   switch (toolName) {
     case 'addObject':

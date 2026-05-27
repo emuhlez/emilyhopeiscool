@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronRight, Check, X } from 'lucide-react'
 import searchIconImg from '../../../images/search.png'
 import styles from './FilterMenu.module.css'
@@ -93,37 +93,12 @@ export function FilterMenu({ isOpen, onClose, position, activeFilters, onFilterC
   // Check if section has any matching results
   const hasResults = (items: string[]) => filterBySearch(items).length > 0
 
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useLayoutEffect(() => {
-    if (!isOpen || !menuRef.current) return
-
-    const el = menuRef.current
-    const rect = el.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const pad = 8
-
-    if (rect.bottom > vh - pad) {
-      el.style.top = `${Math.max(pad, vh - pad - rect.height)}px`
-    }
-    if (rect.top < pad) {
-      el.style.top = `${pad}px`
-    }
-    if (rect.left < pad) {
-      el.style.right = `${vw - pad - rect.width}px`
-    }
-    if (rect.right > vw - pad) {
-      el.style.right = `${pad}px`
-    }
-  }, [isOpen, position])
-
   if (!isOpen) return null
 
   return (
     <>
       <div className={styles.backdrop} onClick={onClose} />
-      <div ref={menuRef} className={styles.menu} style={{ top: position.top, right: position.right }}>
+      <div className={styles.menu} style={{ top: position.top, right: position.right }}>
         <div className={styles.searchContainer}>
           <img src={searchIconImg} alt="Search" className={styles.searchIcon} width={16} height={16} />
           <input

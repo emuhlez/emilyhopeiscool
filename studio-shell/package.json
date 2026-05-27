@@ -1,7 +1,7 @@
 {
-  "name": "ai-native-studio",
+  "name": "studio-shell",
   "version": "0.1.0",
-  "description": "AI-native game editor built with React and TypeScript",
+  "description": "A modern game editor built with React and TypeScript",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx --watch server/index.ts\"",

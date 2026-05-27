@@ -20,7 +20,6 @@ import {
   EyeOff,
   Lock,
   Unlock,
-  Home,
   Star,
   Heart
 } from 'lucide-react'
@@ -132,9 +131,9 @@ const componentExamples: ComponentExample[] = [
       <div style={{ width: '300px' }}>
         <TabHeader
           tabs={[
-            { id: 'home', title: 'Home', icon: <Home size={14} /> },
-            { id: 'settings', title: 'Settings', icon: <Settings size={14} /> },
-            { id: 'profile', title: 'Profile', icon: <Star size={14} /> },
+            { id: 'home', title: 'Home' },
+            { id: 'settings', title: 'Settings' },
+            { id: 'profile', title: 'Profile' },
           ]}
           activeTabId="home"
           onTabSelect={() => {}}
@@ -153,8 +152,8 @@ const componentExamples: ComponentExample[] = [
       <div style={{ width: '320px', background: 'var(--bg-dark)', borderRadius: '4px', border: '1px solid var(--bg-panel)' }}>
         <TabbedPanel
           tabs={[
-            { id: 'files', title: 'Files', icon: <Copy size={14} /> },
-            { id: 'properties', title: 'Properties', icon: <Settings size={14} /> },
+            { id: 'files', title: 'Files' },
+            { id: 'properties', title: 'Properties' },
           ]}
           tabContents={{
             files: <div style={{ padding: '12px', fontSize: '13px' }}>Files content</div>,

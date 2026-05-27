@@ -18,15 +18,12 @@ function persistedToUIMessages(messages: PersistedMessage[]): UIMessage[] {
       parts.push({ type: 'text' as const, text: m.textContent })
     }
 
-    // Restore tool call parts so PlanCard and ToolCallPart render after reload
     if (m.toolCalls?.length) {
       for (const tc of m.toolCalls) {
         parts.push({
           type: `tool-${tc.toolName}`,
           toolCallId: tc.toolCallId ?? `tc-${m.id}-${tc.toolName}`,
           toolName: tc.toolName,
-          // Treat restored tool calls as completed outputs so UI shows "done"
-          // and execution chaining logic can detect available results.
           state: 'output-available',
           input: tc.args ?? {},
           output: tc.result,
@@ -34,7 +31,6 @@ function persistedToUIMessages(messages: PersistedMessage[]): UIMessage[] {
       }
     }
 
-    // Ensure every message has at least one part
     if (parts.length === 0) {
       parts.push({ type: 'text' as const, text: '' })
     }
@@ -51,7 +47,6 @@ interface UseAgentChatOptions {
 export function useAgentChat(options?: UseAgentChatOptions) {
   const storeRef = useRef(useEditorStore.getState())
 
-  // Subscribe once via useEffect to avoid re-subscribing every render
   useEffect(() => {
     const unsub = useEditorStore.subscribe((state) => {
       storeRef.current = state
@@ -70,14 +65,9 @@ export function useAgentChat(options?: UseAgentChatOptions) {
   }, [])
   const mode = options?.mode
 
-  // Use a stable chat ID for useChat. Only change when an explicit conversationId
-  // is provided or when the user switches conversations via the store.
-  // Fall back to 'agent-chat' to keep the hook stable on first render.
   const chatId = options?.conversationId ?? activeConversationId ?? 'agent-chat'
   const isBackgroundTasks = chatId === '__background-tasks__'
 
-  // Tracks which conversation ID is currently streaming so onFinish/onError
-  // can clear the yellow indicator even if the user has switched tabs.
   const streamingConvRef = useRef<string | null>(null)
 
   const transport = useMemo(
@@ -86,10 +76,8 @@ export function useAgentChat(options?: UseAgentChatOptions) {
         api: '/api/agent/chat',
         body: () => {
           const state = storeRef.current
-          // When in pen tool, use sketch mode so the AI understands generate (new from sketch) vs annotate (modify existing)
-          const effectiveMode = mode ?? (state.activeTool === 'pen' ? 'sketch' : undefined)
+          const effectiveMode = mode ?? ((state.activeTool as string) === 'pen' ? 'sketch' : undefined)
 
-          // Include camera context in sketch mode for spatial grounding
           let cameraContext: string | undefined
           if (effectiveMode === 'sketch' && state.getCameraInfo) {
             const camInfo = state.getCameraInfo()
@@ -98,7 +86,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
             }
           }
 
-          // Read and consume the pending follow-up flag set by the plan executor
           const planState = usePlanStore.getState()
           const followUp = planState.pendingFollowUp
           if (followUp) {
@@ -123,19 +110,14 @@ export function useAgentChat(options?: UseAgentChatOptions) {
           }
         },
       }),
-    [chatId, mode]
+    [chatId, mode, isBackgroundTasks]
   )
 
-  // Signals to the plan executor that an auto-send is imminent —
-  // prevents premature plan completion detection.
   const autoSendPendingRef = useRef(false)
 
   const chat = useChat({
     id: chatId,
     transport,
-    // After streaming ends with pending tool results during plan EXECUTION,
-    // auto-send the next request so the AI can chain scene tools (addObject → addObject → ...)
-    // Do NOT auto-send after createPlan — we need the user to interact with the plan card first.
     sendAutomaticallyWhen: ({ messages }) => {
       const planState = usePlanStore.getState()
       if (planState.activePlan?.status !== 'executing') return false
@@ -169,13 +151,11 @@ export function useAgentChat(options?: UseAgentChatOptions) {
       }
     },
     onFinish: ({ message }) => {
-      // Clear generating state so toolbar spinner stops
       if (!isBackgroundTasks) {
         const es = useEditorStore.getState()
         es.setAiGenerating(false)
         es.setAiWorkingObjectIds(new Set())
       }
-      // Clear streaming indicator for the conversation that started this stream
       if (streamingConvRef.current) {
         useConversationStore.getState().markReady(streamingConvRef.current)
         streamingConvRef.current = null
@@ -194,7 +174,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
       const toolCalls = message.parts
         ?.filter((p) => p.type.startsWith('tool-'))
         .map((p) => {
-          // AI SDK v6: tool parts have type `tool-${toolName}`, properties at top level
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const part = p as any
           return {
@@ -215,10 +194,8 @@ export function useAgentChat(options?: UseAgentChatOptions) {
 
       convStore.addMessage(convId, persisted)
 
-      // Auto-generate conversation summary after 4+ messages (Gap 6)
       const conv = convStore.conversations[convId]
       if (conv && !conv.summary && conv.messages.length >= 3) {
-        // Fire-and-forget: don't block the chat
         fetch('/api/agent/summarize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -234,13 +211,11 @@ export function useAgentChat(options?: UseAgentChatOptions) {
       }
     },
     onError: (error) => {
-      // Clear generating state so toolbar spinner stops
       if (!isBackgroundTasks) {
         const es = useEditorStore.getState()
         es.setAiGenerating(false)
         es.setAiWorkingObjectIds(new Set())
       }
-      // Clear streaming indicator for the conversation that started this stream
       if (streamingConvRef.current) {
         useConversationStore.getState().markReady(streamingConvRef.current)
         streamingConvRef.current = null
@@ -252,7 +227,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
         'AI Agent'
       )
 
-      // Persist error as an inline message so it appears in the chat
       if (!isBackgroundTasks) {
         const convStore = useConversationStore.getState()
         const convId = options?.conversationId ?? convStore.activeConversationId
@@ -269,8 +243,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
     },
   })
 
-  // Track auto-send state for the plan executor: when sendAutomaticallyWhen
-  // fires, the execution loop isn't finished yet so plan completion should wait.
   useEffect(() => {
     if (chat.status === 'submitted') {
       autoSendPendingRef.current = true
@@ -279,8 +251,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
     }
   }, [chat.status])
 
-  // Track per-conversation streaming state so non-active tabs can show
-  // a yellow "in-progress" indicator after the user switches away.
   const convIdForStreaming = options?.conversationId ?? activeConversationId
   useEffect(() => {
     if (isBackgroundTasks || !convIdForStreaming) return
@@ -297,17 +267,12 @@ export function useAgentChat(options?: UseAgentChatOptions) {
     }
   }, [chat.status, convIdForStreaming, isBackgroundTasks])
 
-  // Restore persisted messages when switching to a conversation that the
-  // AI SDK has no in-memory cache for (e.g. tab switch, page reload).
   const prevChatIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (isBackgroundTasks) return
-    // Skip the very first render where prevChatIdRef is null but chatId is already set —
-    // allow it to run so we restore messages on initial page load too.
     if (prevChatIdRef.current === chatId) return
     prevChatIdRef.current = chatId
 
-    // If the AI SDK already has messages cached for this id, nothing to do
     if (chat.messages.length > 0) return
 
     const convStore = useConversationStore.getState()
@@ -319,14 +284,12 @@ export function useAgentChat(options?: UseAgentChatOptions) {
     chat.setMessages(persistedToUIMessages(conv.messages))
   }, [chatId, isBackgroundTasks, chat.messages.length, chat.setMessages, options?.conversationId])
 
-  // Wrap sendMessage to persist user messages to conversation store
   const sendMessage = useCallback(
     (params?: Parameters<typeof chat.sendMessage>[0]) => {
       if (!isBackgroundTasks) {
         const convStore = useConversationStore.getState()
         let convId = options?.conversationId ?? convStore.activeConversationId
 
-        // Ensure we always have a conversation so the chat is saved and visible in the switcher
         if (!convId || !convStore.conversations[convId]) {
           convId = convStore.createConversation()
         }
@@ -338,7 +301,6 @@ export function useAgentChat(options?: UseAgentChatOptions) {
               ? (params as { text: string }).text
               : ''
 
-          // Detect "resume build" intent — re-enter execution mode if a completed plan exists
           if (text && /\b(resume|continue|keep)\b.*\b(build|going|executing|task)\b/i.test(text)) {
             const planState = usePlanStore.getState()
             if (planState.activePlan?.status === 'done') {
@@ -365,7 +327,7 @@ export function useAgentChat(options?: UseAgentChatOptions) {
 
       return chat.sendMessage(params)
     },
-    [chat.sendMessage, isBackgroundTasks, options?.conversationId]
+    [chat, isBackgroundTasks, options?.conversationId]
   )
 
   return {

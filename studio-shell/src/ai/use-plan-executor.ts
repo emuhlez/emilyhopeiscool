@@ -16,7 +16,6 @@ const STEP_DELAY_MS = 300
 function generateTodosFromAnswers(prompt: string, questions: PlanQuestion[], answers: string[]): PlanTodo[] {
   const todos: PlanTodo[] = []
 
-  // Parse answers by question category
   const answerMap = new Map<string, string>()
   questions.forEach((q, i) => {
     const category = (q.category ?? '').toLowerCase()
@@ -27,15 +26,12 @@ function generateTodosFromAnswers(prompt: string, questions: PlanQuestion[], ans
   const featuresAnswer = (answerMap.get('features') ?? '').toLowerCase()
   const styleAnswer = answerMap.get('style') ?? ''
 
-  // 1. Always start with planning/reference step
   todos.push({ label: `Plan layout for: ${prompt}`, category: 'Planning' })
 
-  // 2. Style step if specified
   if (styleAnswer) {
     todos.push({ label: `Set up ${styleAnswer.toLowerCase()} visual style and materials`, category: 'Style' })
   }
 
-  // 3. Feature-based steps
   if (featuresAnswer.includes('terrain')) {
     todos.push({ label: 'Create terrain and landscape', category: 'Environment' })
     if (scopeAnswer.includes('elaborate')) {
@@ -67,7 +63,6 @@ function generateTodosFromAnswers(prompt: string, questions: PlanQuestion[], ans
     }
   }
 
-  // 4. If no features were selected, generate generic steps based on scope
   if (!featuresAnswer) {
     todos.push({ label: `Build core elements for ${prompt}`, category: 'Structure' })
     if (scopeAnswer.includes('medium') || scopeAnswer.includes('elaborate')) {
@@ -80,7 +75,6 @@ function generateTodosFromAnswers(prompt: string, questions: PlanQuestion[], ans
     }
   }
 
-  // 5. Always end with review
   todos.push({ label: 'Review and adjust final result', category: 'Review' })
 
   return todos
@@ -99,23 +93,19 @@ export function usePlanExecutor() {
 
   const executingRef = useRef(false)
 
-  // Reset executingRef when plan is cleared so new plans can execute
   useEffect(() => {
     if (!activePlan) {
       executingRef.current = false
     }
   }, [activePlan])
 
-  // When questions are answered, generate concrete todos from the recipe and set the plan
   useEffect(() => {
     if (activePlan?.status !== 'answered') return
 
-    // Simulated plans: transition to todos in-place, preserving Q&A data
     if (activePlan.simulated) {
       console.log('[PlanExecutor] Simulated Q&A answered — transitioning to todos')
       transitionToTodos(MOCK_TODOS.todos)
 
-      // Add assistant message to the conversation
       const convStore = useConversationStore.getState()
       const convId = convStore.activeConversationId
       if (convId) {
@@ -135,13 +125,11 @@ export function usePlanExecutor() {
       return
     }
 
-    // Recipe-based plans: todos are already stored in the plan data
     const storedTodos = activePlan.data.todos ?? []
     if (storedTodos.length > 0) {
       console.log('[PlanExecutor] Q&A answered — transitioning to stored todos', storedTodos.length, 'items')
       transitionToTodos(storedTodos)
 
-      // Add assistant message to the conversation
       const convStore = useConversationStore.getState()
       const convId = convStore.activeConversationId
       if (convId) {
@@ -161,7 +149,6 @@ export function usePlanExecutor() {
       return
     }
 
-    // /plan command: generate todos dynamically from user prompt + answers
     const prompt = activePlan.data.prompt ?? 'New project'
     const questions = activePlan.data.questions ?? []
     const answers = activePlan.data.answers ?? []
@@ -171,7 +158,6 @@ export function usePlanExecutor() {
     const generatedTodos = generateTodosFromAnswers(prompt, questions, answers)
     transitionToTodos(generatedTodos)
 
-    // Add assistant message to the conversation
     const convStore2 = useConversationStore.getState()
     const convId2 = convStore2.activeConversationId
     if (convId2) {
@@ -190,12 +176,10 @@ export function usePlanExecutor() {
     }
   }, [activePlan?.status, activePlan?.data, clearPlan, transitionToTodos])
 
-  // When plan is approved, start execution
   useEffect(() => {
     if (activePlan?.status !== 'approved') return
     if (executingRef.current) return
 
-    // Simulated plans use timer-based execution instead of real API calls
     if (activePlan.simulated) {
       executingRef.current = true
       console.log('[PlanExecutor] Simulated plan approved — running fake execution')
@@ -210,16 +194,13 @@ export function usePlanExecutor() {
     startExecuting()
 
     if (mode === 'step-by-step') {
-      // Step-by-step: execute the first step only
       usePlanStore.getState().startStepExecution(0)
       executeStep(activePlan.id, 0)
     } else {
-      // One-shot: execute all steps with staggered delays
       executeAllSteps(activePlan.id)
     }
   }, [activePlan?.status, startExecuting, activePlan?.executionMode, activePlan?.id])
 
-  // Watch for step-by-step continue/redo transitions
   useEffect(() => {
     if (!activePlan || activePlan.executionMode !== 'step-by-step') return
     if (activePlan.status !== 'executing') return
@@ -230,11 +211,9 @@ export function usePlanExecutor() {
     if (stepStatus !== 'executing') return
     if (!executingRef.current) return
 
-    // Execute the current step
     executeStep(activePlan.id, currentIndex)
   }, [activePlan?.status, activePlan?.currentStepIndex, activePlan?.stepStatuses, activePlan?.executionMode, activePlan?.id])
 
-  // Clean up when plan is done or rejected
   useEffect(() => {
     if (!activePlan) {
       executingRef.current = false
@@ -247,7 +226,6 @@ export function usePlanExecutor() {
   }, [activePlan?.status, activePlan?.id])
 }
 
-/** Execute a single step's tool calls. */
 function executeStep(planId: string, stepIndex: number): void {
   const steps = getRecipeSteps(planId)
   if (!steps || stepIndex >= steps.length) {
@@ -267,11 +245,9 @@ function executeStep(planId: string, stepIndex: number): void {
     }
   }
 
-  // Mark step complete
   usePlanStore.getState().completeStep(stepIndex)
 }
 
-/** Execute all steps sequentially with staggered delays for visual feedback. */
 function executeAllSteps(planId: string): void {
   const steps = getRecipeSteps(planId)
   if (!steps || steps.length === 0) {
@@ -280,7 +256,6 @@ function executeAllSteps(planId: string): void {
     return
   }
 
-  // Show generating indicator
   useEditorStore.getState().setAiGenerating(true)
 
   let stepIndex = 0
@@ -309,7 +284,6 @@ function executeAllSteps(planId: string): void {
     usePlanStore.getState().completeStep(stepIndex)
     stepIndex++
 
-    // Staggered delay for visual feedback
     if (stepIndex < steps!.length) {
       setTimeout(runNext, STEP_DELAY_MS)
     } else {

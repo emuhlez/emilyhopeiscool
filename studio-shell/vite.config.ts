@@ -3,10 +3,9 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 export default defineConfig({
-  base: process.env.PAGES_BASE ?? '/',
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 3000,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

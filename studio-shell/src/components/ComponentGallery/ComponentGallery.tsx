@@ -6,7 +6,6 @@ import { MenuDropdown } from '../shared/MenuDropdown'
 import { TabbedPanel } from '../shared/TabbedPanel'
 import { TabHeader } from '../shared/TabHeader'
 import { 
-  Package, 
   Search, 
   ChevronRight,
   ChevronDown,
@@ -21,9 +20,6 @@ import {
   EyeOff,
   Lock,
   Unlock,
-  Home,
-  Box,
-  Zap,
   Star,
   Heart
 } from 'lucide-react'
@@ -90,14 +86,13 @@ const componentExamples: ComponentExample[] = [
   // Panel Examples
   {
     name: 'Panel',
-    description: 'Container with header, icon, and action buttons',
+    description: 'Container with header and action buttons',
     category: 'Layout',
     location: 'src/components/shared/Panel.tsx',
     preview: (
       <div style={{ width: '300px', background: 'var(--bg-dark)', borderRadius: '4px', border: '1px solid var(--bg-panel)' }}>
         <Panel
           title="Example Panel"
-          icon={<Box size={16} />}
           actions={
             <>
               <IconButton icon={<Settings size={14} />} size="sm" />
@@ -123,7 +118,6 @@ const componentExamples: ComponentExample[] = [
       <div style={{ width: '300px' }}>
         <PanelHeader
           title="Custom Header"
-          icon={<Zap size={16} />}
           actions={
             <IconButton icon={<Settings size={14} />} size="sm" />
           }
@@ -180,9 +174,9 @@ const componentExamples: ComponentExample[] = [
       <div style={{ width: '300px' }}>
         <TabHeader
           tabs={[
-            { id: 'home', title: 'Home', icon: <Home size={14} /> },
-            { id: 'settings', title: 'Settings', icon: <Settings size={14} /> },
-            { id: 'profile', title: 'Profile', icon: <Star size={14} /> },
+            { id: 'home', title: 'Home' },
+            { id: 'settings', title: 'Settings' },
+            { id: 'profile', title: 'Profile' },
           ]}
           activeTabId="home"
           onTabSelect={() => {}}
@@ -201,8 +195,8 @@ const componentExamples: ComponentExample[] = [
       <div style={{ width: '320px', background: 'var(--bg-dark)', borderRadius: '4px', border: '1px solid var(--bg-panel)' }}>
         <TabbedPanel
           tabs={[
-            { id: 'files', title: 'Files', icon: <Copy size={14} /> },
-            { id: 'properties', title: 'Properties', icon: <Settings size={14} /> },
+            { id: 'files', title: 'Files' },
+            { id: 'properties', title: 'Properties' },
           ]}
           tabContents={{
             files: <div style={{ padding: '12px', fontSize: '13px' }}>Files content</div>,
@@ -288,10 +282,7 @@ export function ComponentGallery() {
   const totalComponents = componentExamples.length
 
   return (
-    <Panel
-      title="Component Library"
-      icon={<Package size={16} />}
-    >
+    <Panel title="Component Library">
       <div className={styles.gallery}>
         {/* Search Bar */}
         <div className={styles.searchBar}>

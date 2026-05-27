@@ -15,13 +15,13 @@ import {
 
 import { ExpandDownIcon, ExpandRightIcon } from '../shared/ExpandIcons'
 import searchIconImg from '../../../images/search.png'
+import sidebarIconSvg from '/icons/sidebar.svg'
 import { DockablePanel } from '../shared/DockablePanel'
 import { IconButton } from '../shared/IconButton'
 import { ContextMenu, useContextMenu } from '../shared/ContextMenu'
 import { MenuDropdown, type MenuItem } from '../shared/MenuDropdown'
 import { useEditorStore } from '../../store/editorStore'
 import type { Asset } from '../../types'
-import { publicUrl } from '../../utils/assetUrl'
 import { AssetTile } from './AssetTile'
 import { MoveDialog } from './MoveDialog'
 import { FilterMenu, type ActiveFilters } from './FilterMenu'
@@ -31,19 +31,19 @@ import styles from './Assets.module.css'
 const assetIcons: Record<Asset['type'], React.ReactNode> = {
   folder: <Folder size={14} />,
   texture: <Image size={14} />,
-  model: <img src={publicUrl('icons/model.svg')} alt="Model" width={14} height={14} />,
-  audio: <img src={publicUrl('icons/audio.svg')} alt="Audio" width={14} height={14} />,
+  model: <img src="/icons/model.svg" alt="Model" width={14} height={14} />,
+  audio: <img src="/icons/audio.svg" alt="Audio" width={14} height={14} />,
   video: <Video size={14} />,
   script: <FileCode size={14} />,
   material: <Layers size={14} />,
   prefab: <Box size={14} />,
   scene: <Film size={14} />,
-  animation: <img src={publicUrl('icons/animation.svg')} alt="Animation" width={14} height={14} />,
+  animation: <img src="/icons/animation.svg" alt="Animation" width={14} height={14} />,
 }
 
 const SPECIAL_NAV_ITEMS = [
-  { id: 'recent', label: 'Import Queue', icon: <img src={publicUrl('icons/recently-imported.svg')} alt="Import Queue" width={16} height={16} /> },
-  { id: 'import-queue', label: 'Crossy Farm', icon: <img src={publicUrl('icons/experience-folder.svg')} alt="Crossy Farm" width={16} height={16} /> },
+  { id: 'recent', label: 'Import Queue', icon: <img src="/icons/recently-imported.svg" alt="Import Queue" width={16} height={16} /> },
+  { id: 'import-queue', label: 'Crossy Farm', icon: <img src="/icons/experience-folder.svg" alt="Crossy Farm" width={16} height={16} /> },
 ] as const
 
 const INVENTORIES_NAV_ID = 'inventories'
@@ -634,11 +634,7 @@ export function Assets() {
   ] : []
 
   return (
-    <DockablePanel
-      widgetId="assets"
-      title="Asset Manager"
-      icon={<Folder size={16} />}
-    >
+    <DockablePanel widgetId="assets" title="Asset Manager">
       <div ref={bodyRef} className={styles.body}>
         {isSideNavOpen && (
         <div
@@ -651,7 +647,7 @@ export function Assets() {
         >
           <div className={styles.sideNavSearch}>
             <IconButton 
-              icon={<img src={publicUrl('icons/left-sidebar.svg')} alt="Toggle Sidebar" width={16} height={16} />}
+              icon={<img src={sidebarIconSvg} alt="Toggle Sidebar" width={16} height={16} />}
               size="xs" 
               tooltip="Toggle Sidebar" 
               onClick={() => setIsSideNavOpen(!isSideNavOpen)}
@@ -726,7 +722,7 @@ export function Assets() {
                         {null}
                       </span>
                       <span className={styles.sideNavIcon}>
-                        <img src={publicUrl('icons/recently-imported.svg')} alt="Import Queue" width={16} height={16} />
+                        <img src="/icons/recently-imported.svg" alt="Import Queue" width={16} height={16} />
                       </span>
                       <span className={styles.sideNavName}>Import Queue</span>
                     </div>
@@ -752,7 +748,7 @@ export function Assets() {
                           {crossyFarmExpanded ? <ExpandDownIcon /> : <ExpandRightIcon />}
                         </span>
                         <span className={styles.sideNavIcon}>
-                          <img src={publicUrl('icons/experience-folder.svg')} alt="Crossy Farm" width={16} height={16} />
+                          <img src="/icons/experience-folder.svg" alt="Crossy Farm" width={16} height={16} />
                         </span>
                         <span className={styles.sideNavName}>Crossy Farm</span>
                       </div>
@@ -782,7 +778,7 @@ export function Assets() {
                                 <ExpandRightIcon />
                               </span>
                               <span className={styles.sideNavIcon}>
-                                <img src={publicUrl('icons/folder.svg')} alt="" width={16} height={16} />
+                                <img src="/icons/folder.svg" alt="" width={16} height={16} />
                               </span>
                               <span className={styles.sideNavName}>{displayName}</span>
                             </div>
@@ -822,7 +818,7 @@ export function Assets() {
                         <ExpandRightIcon />
                       </span>
                       <span className={styles.sideNavIcon}>
-                        <img src={publicUrl('icons/inventory.svg')} alt="Inventory" width={16} height={16} />
+                        <img src="/icons/inventory.svg" alt="Inventory" width={16} height={16} />
                       </span>
                       <span className={styles.sideNavName}>ehopehopehope</span>
                     </div>
@@ -839,7 +835,7 @@ export function Assets() {
                         <ExpandRightIcon />
                       </span>
                       <span className={styles.sideNavIcon}>
-                        <img src={publicUrl('icons/group-inventory.svg')} alt="Group Inventory" width={16} height={16} />
+                        <img src="/icons/group-inventory.svg" alt="Group Inventory" width={16} height={16} />
                       </span>
                       <span className={styles.sideNavName}>alpha strike</span>
                     </div>
@@ -868,7 +864,7 @@ export function Assets() {
               <div className={styles.contentRowChevrons}>
                 {!isSideNavOpen && (
                   <IconButton 
-                    icon={<img src={publicUrl('icons/left-sidebar.svg')} alt="Toggle Sidebar" width={16} height={16} />}
+                    icon={<img src={sidebarIconSvg} alt="Toggle Sidebar" width={16} height={16} />}
                     size="xs" 
                     tooltip="Toggle Sidebar" 
                     onClick={() => setIsSideNavOpen(!isSideNavOpen)}
@@ -905,13 +901,13 @@ export function Assets() {
                     }}
                   />
                   <IconButton 
-                    icon={<img src={publicUrl('icons/Open.svg')} alt="Open" width={16} height={16} />} 
+                    icon={<img src="/icons/Open.svg" alt="Open" width={16} height={16} />} 
                     size="sm" 
                     tooltip="Open" 
                     onClick={() => queueFileInputRef.current?.click()}
                   />
                   <IconButton 
-                    icon={<img src={publicUrl('icons/Cleanup.svg')} alt="Cleanup" width={16} height={16} />} 
+                    icon={<img src="/icons/Cleanup.svg" alt="Cleanup" width={16} height={16} />} 
                     size="sm" 
                     tooltip="Clear Queue" 
                     onClick={clearImportQueue}
@@ -945,10 +941,10 @@ export function Assets() {
             <div className={styles.contentRowActions}>
               {!isImportQueueView && (
                 <>
-                  <IconButton icon={<img src={publicUrl('icons/refresh.svg')} alt="Import Asset" width={16} height={16} />} size="xs" tooltip="Import Asset" />
+                  <IconButton icon={<img src="/icons/refresh.svg" alt="Import Asset" width={16} height={16} />} size="xs" tooltip="Import Asset" />
                   <IconButton
                     ref={filterButtonRef}
-                    icon={<img src={publicUrl('icons/filter.svg')} alt="Filter" width={16} height={16} />}
+                    icon={<img src="/icons/filter.svg" alt="Filter" width={16} height={16} />}
                     size="xs"
                     tooltip="Filter"
                     onClick={handleFilterClick}
@@ -957,9 +953,9 @@ export function Assets() {
                   <IconButton
                     icon={
                       assetViewMode === 'grid' ? (
-                        <img src={publicUrl('icons/grid-view.svg')} alt="Grid view" width={16} height={16} />
+                        <img src="/icons/grid-view.svg" alt="Grid view" width={16} height={16} />
                       ) : (
-                        <img src={publicUrl('icons/list-view.svg')} alt="List view" width={16} height={16} />
+                        <img src="/icons/list-view.svg" alt="List view" width={16} height={16} />
                       )
                     }
                     size="xs"
@@ -1076,7 +1072,7 @@ export function Assets() {
                         return (
                           <tr key={item.id} className={styles.contentTableRow}>
                             <td className={`${styles.contentTableTd} ${styles.contentTableTdCheckbox}`}>
-                              <img src={publicUrl('icons/checkbox-on.svg')} alt="Selected" width={14} height={14} className={styles.tableCheckboxIcon} />
+                              <img src="/icons/checkbox-on.svg" alt="Selected" width={14} height={14} className={styles.tableCheckboxIcon} />
                             </td>
                             <td className={styles.contentTableTd}>
                               <span className={styles.contentTableAssetIcon}>{icon}</span>
@@ -1126,10 +1122,10 @@ export function Assets() {
                             </td>
                             <td className={`${styles.contentTableTd} ${styles.contentTableTdStatus} ${statusClass}`}>
                               {item.status === 'importing' && (
-                                <img src={publicUrl(`icons/ProgressCircle-${progressFrame}.svg`)} alt="Importing" width={16} height={16} className={styles.progressCircle} />
+                                <img src={`/icons/ProgressCircle-${progressFrame}.svg`} alt="Importing" width={16} height={16} className={styles.progressCircle} />
                               )}
                               {item.status === 'success' && (
-                                <img src={publicUrl('icons/success.svg')} alt="Success" width={16} height={16} />
+                                <img src="/icons/success.svg" alt="Success" width={16} height={16} />
                               )}
                             </td>
                           </tr>
@@ -1194,7 +1190,7 @@ export function Assets() {
                       </tr>
                     ) : (
                       assetsForGrid.map((asset) => {
-                        const icon = asset.type === 'folder' ? <img src={publicUrl('icons/folder.svg')} alt="" width={16} height={16} /> : assetIcons[asset.type]
+                        const icon = asset.type === 'folder' ? <img src="/icons/folder.svg" alt="" width={16} height={16} /> : assetIcons[asset.type]
                         const displayName = asset.name === 'Sprites' ? 'Interior Props' : asset.name
                         const isFolder = asset.type === 'folder'
                         const previewImageUrl =
@@ -1209,7 +1205,7 @@ export function Assets() {
                             key={asset.id}
                             className={`${styles.contentTableRow} ${isSelected ? styles.contentTableRowSelected : ''} ${isDragOver ? styles.dragOver : ''}`}
                             draggable={renamingAssetId !== asset.id}
-                            onClick={(e) => selectAsset(asset.id, { range: e.shiftKey, additive: !e.shiftKey || e.metaKey || e.ctrlKey, visibleAssetIds })}
+                            onClick={(e) => selectAsset(asset.id, { range: e.shiftKey, additive: e.metaKey || e.ctrlKey, visibleAssetIds })}
                             onDoubleClick={isFolder ? () => navigateToFolder(asset.id) : undefined}
                             onContextMenu={(e) => handleAssetContextMenu(asset.id, e)}
                             onMouseDown={(e) => {
@@ -1288,7 +1284,7 @@ export function Assets() {
                   <div className={styles.contentTableEmpty}>No assets</div>
                 ) : (
                   assetsForGrid.map((asset) => {
-                    const icon = asset.type === 'folder' ? <img src={publicUrl('icons/folder.svg')} alt="" width={16} height={16} /> : assetIcons[asset.type]
+                    const icon = asset.type === 'folder' ? <img src="/icons/folder.svg" alt="" width={16} height={16} /> : assetIcons[asset.type]
                     const displayName = asset.name === 'Sprites' ? 'Interior Props' : asset.name
                     const previewImageUrl =
                       asset.type === 'texture' || asset.type === 'material'
@@ -1310,7 +1306,7 @@ export function Assets() {
                         previewImageUrl={previewImageUrl}
                         modelPath={modelPath}
                         isSelected={isSelected}
-                        onSelect={(e) => selectAsset(asset.id, { range: e?.shiftKey, additive: !e?.shiftKey || e?.metaKey || e?.ctrlKey, visibleAssetIds })}
+                        onSelect={(e) => selectAsset(asset.id, { range: e?.shiftKey, additive: e?.metaKey || e?.ctrlKey, visibleAssetIds })}
                         onDoubleClick={handleDoubleClick}
                         onContextMenu={(e) => handleAssetContextMenu(asset.id, e)}
                         isRenaming={renamingAssetId === asset.id}

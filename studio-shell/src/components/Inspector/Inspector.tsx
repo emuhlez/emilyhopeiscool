@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Settings } from 'lucide-react'
-import { publicUrl } from '../../utils/assetUrl'
+import { DockablePanel } from '../shared/DockablePanel'
+import { MenuDropdown } from '../shared/MenuDropdown'
+import { PropertiesLabel } from '../shared/PropertiesLabel'
+import { ExpandDownIcon, ExpandRightIcon } from '../shared/ExpandIcons'
+import { ModelPreview } from './ModelPreview'
+import { TexturePreview } from './TexturePreview'
+import { THREE_SPACE_ASSETS } from '../Viewport/threeSpaceAssets'
+import { useEditorStore } from '../../store/editorStore'
+import styles from './Inspector.module.css'
 
 function toNumericId(seed: string, length: number): string {
   let hash = 0
@@ -32,16 +39,6 @@ function getSourceFilename(modelName: string): string {
 
 const MESH_ACCEPT = '.glb,.gltf,.obj,.fbx,.dae'
 const TEXTURE_ACCEPT = '.png,.jpg,.jpeg,.webp,.tga,.tif,.tiff,.bmp'
-import { DockablePanel } from '../shared/DockablePanel'
-import { MenuDropdown } from '../shared/MenuDropdown'
-import { PropertiesLabel } from '../shared/PropertiesLabel'
-import { ExpandDownIcon, ExpandRightIcon } from '../shared/ExpandIcons'
-import { ModelPreview } from './ModelPreview'
-import { TexturePreview } from './TexturePreview'
-import { THREE_SPACE_ASSETS } from '../Viewport/threeSpaceAssets'
-import { useEditorStore } from '../../store/editorStore'
-import { useDockingStore } from '../../store/dockingStore'
-import styles from './Inspector.module.css'
 
 export function Inspector() {
   const [transformExpanded, setTransformExpanded] = useState(true)
@@ -104,11 +101,6 @@ export function Inspector() {
 
   const effectivePrimaryId = selectedObject?.id ?? primaryId ?? null
   const textureId = selectedObject ? toTextureId(selectedObject.id) : toTextureId('texture')
-  const setInspectorBodyCollapsed = useDockingStore((s) => s.setInspectorBodyCollapsed)
-
-  useEffect(() => {
-    setInspectorBodyCollapsed(!selectedObject && !primaryAssetName)
-  }, [selectedObject, primaryAssetName, setInspectorBodyCollapsed])
 
   useEffect(() => {
     if (selectedObject?.texturePath) {
@@ -145,22 +137,17 @@ export function Inspector() {
 
   if (!selectedObject && !primaryAssetName) {
     return (
-      <DockablePanel
-        widgetId="inspector"
-        title="Properties"
-        icon={<Settings size={16} />}
-        className={styles.propertiesPanel}
-        bodyCollapsed
-      >
-        {/* Placeholder keeps content height in DOM so collapse transition can run */}
-        <div className={styles.collapsePlaceholder} aria-hidden />
+      <DockablePanel widgetId="inspector" title="Properties" className={styles.propertiesPanel}>
+        <div className={styles.empty}>
+          <p>Select an object to inspect</p>
+        </div>
       </DockablePanel>
     )
   }
 
   if (primaryAssetName && !selectedObject) {
     return (
-      <DockablePanel widgetId="inspector" title="Properties" icon={<Settings size={16} />} className={styles.propertiesPanel}>
+      <DockablePanel widgetId="inspector" title="Properties" className={styles.propertiesPanel}>
         <div className={styles.content}>
           {hasMulti && (
             <p style={{ fontSize: 12, color: 'var(--content-muted)', margin: '8px 12px' }}>
@@ -272,12 +259,7 @@ export function Inspector() {
   }
 
   return (
-    <DockablePanel
-      widgetId="inspector"
-      title="Properties"
-      icon={<Settings size={16} />}
-      className={styles.propertiesPanel}
-    >
+    <DockablePanel widgetId="inspector" title="Properties" className={styles.propertiesPanel}>
       <input
         ref={meshFileInputRef}
         type="file"
@@ -429,7 +411,7 @@ export function Inspector() {
                   title="Select mesh file"
                   aria-label="Select mesh file"
                 >
-                  <img src={publicUrl('icons/QuickOpen.svg')} alt="" width={16} height={16} className={styles.sourceIcon} />
+                  <img src="/icons/QuickOpen.svg" alt="" width={16} height={16} className={styles.sourceIcon} />
                 </button>
               </div>
               <div className={styles.transformRow}>
@@ -457,7 +439,7 @@ export function Inspector() {
                   title="Select texture file"
                   aria-label="Select texture file"
                 >
-                  <img src={publicUrl('icons/QuickOpen.svg')} alt="" width={16} height={16} className={styles.sourceIcon} />
+                  <img src="/icons/QuickOpen.svg" alt="" width={16} height={16} className={styles.sourceIcon} />
                 </button>
               </div>
               <div className={`${styles.transformRow} ${styles.renderFidelityRow}`} ref={compactDropdownRef}>
@@ -977,27 +959,10 @@ interface TransformRowProps {
 function TransformRow({ label, values, onChange, unit = 'number' }: TransformRowProps) {
   const step = unit === 'degrees' ? '1' : '0.1'
   const inputWidth = (v: number) => Math.max(3, String(v).length + 1)
-  const labelRef = useRef<HTMLLabelElement>(null)
-  const [labelOverflows, setLabelOverflows] = useState(false)
-
-  useEffect(() => {
-    const el = labelRef.current
-    if (!el) return
-    const check = () => setLabelOverflows(el.scrollWidth > el.clientWidth)
-    check()
-    const ro = new ResizeObserver(check)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [label])
 
   return (
     <div className={styles.transformRow}>
-      <label
-        ref={labelRef}
-        className={`${styles.transformLabel} ${labelOverflows ? styles.overflowing : ''}`}
-      >
-        {label}
-      </label>
+      <label className={styles.transformLabel}>{label}</label>
       <div className={styles.transformInputs}>
         <div className={styles.inputGroup} data-axis="x">
           <span className={styles.axisLine} aria-hidden />
