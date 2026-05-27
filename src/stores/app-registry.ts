@@ -10,6 +10,7 @@ import trashIconUrl from '../../dock icons/Trash.svg?url'
 import { ArcWindow } from '../features/arc/ArcWindow'
 import { NotesWindow } from '../features/notes/NotesWindow'
 import { PhotosWindow } from '../features/photos/PhotosWindow'
+import { RobloxStudioWindow } from '../features/roblox-studio/RobloxStudioWindow'
 
 export interface AppDefinition {
   id: string
@@ -38,6 +39,7 @@ export const APP_REGISTRY: Record<string, AppDefinition> = {
     name: 'Roblox Studio',
     menuItems: ['File', 'Edit', 'View', 'Insert', 'Model', 'Test', 'Plugins'],
     iconUrl: robloxStudioIconUrl,
+    windowComponent: RobloxStudioWindow,
   },
   figma: {
     id: 'figma',
