@@ -11,7 +11,6 @@ export interface PhotoItem {
   height: number
   isVideo?: boolean
   duration?: number // seconds, for videos
-  hasComment?: boolean
 }
 
 export interface Album {
@@ -88,7 +87,13 @@ const SAMPLE_PHOTOS: PhotoItem[] = Array.from({ length: TOTAL }, (_, i) => {
   const w = 400 + (i % 3) * 100
   const h = 300 + (i % 4) * 80
   const isVideo = i % 7 === 3
-  const daysAgo = Math.floor(i / 4)
+  /* Quadratic spread of capture dates so the seed library spans roughly the
+   * last 2.5 years rather than a single 14-day window. Recent photos cluster
+   * (low i = small daysAgo gap), older photos thin out — same shape as a
+   * real photo library. Years view ends up with 2026/2025/2024 sections;
+   * Months view gets ~12–15 sections with denser-recent / sparser-older
+   * photo counts. */
+  const daysAgo = Math.floor((i * i) / 4)
   const date = new Date(2026, 3, 12)
   date.setDate(date.getDate() - daysAgo)
   date.setHours(12, (i * 5) % 60)
@@ -103,7 +108,6 @@ const SAMPLE_PHOTOS: PhotoItem[] = Array.from({ length: TOTAL }, (_, i) => {
     height: h,
     isVideo,
     duration: isVideo ? [40, 5, 30, 12, 65][i % 5] : undefined,
-    hasComment: i % 4 === 0,
   }
 })
 
@@ -153,4 +157,77 @@ export function filterPhotosBySection(
     default:
       return photos
   }
+}
+
+/** A time-bucketed group of photos for the Months/Years views. `label` is the
+ * human-readable section title ("April 2026", "2025"); empty string for the
+ * single bucket used by the 'all' view (caller suppresses the header). */
+export interface PhotosSection {
+  key: string
+  label: string
+  sublabel: string
+  photos: PhotoItem[]
+}
+
+const FMT_MONTH = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  year: 'numeric',
+})
+const FMT_YEAR = new Intl.DateTimeFormat('en-US', { year: 'numeric' })
+
+/** Group photos into time-based sections matching the active ViewMode.
+ *
+ *  - 'all'    → one synthetic section with every photo, empty label (the grid
+ *               renders no header, preserving the flat-justified layout).
+ *  - 'months' → one section per (year, month). Sections sorted newest-first;
+ *               photos within each section sorted newest-first.
+ *  - 'years'  → one section per year. Same sort.
+ *
+ *  Why bucket here (vs. inside the grid component): the grid only needs a
+ *  list of sections to iterate, and bucketing is a pure function of (photos,
+ *  mode). Keeping it next to the store gives any future caller (e.g. an
+ *  alternate layout, a memo selector) a single source of truth for the
+ *  Years/Months partition. */
+export function bucketPhotos(
+  photos: PhotoItem[],
+  mode: ViewMode,
+): PhotosSection[] {
+  if (mode === 'all') {
+    return [{ key: 'all', label: '', sublabel: '', photos }]
+  }
+
+  type Bucket = { key: string; date: Date; photos: PhotoItem[] }
+  const map = new Map<string, Bucket>()
+
+  for (const p of photos) {
+    const d = new Date(p.date)
+    const key =
+      mode === 'years'
+        ? `${d.getFullYear()}`
+        : `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`
+    let b = map.get(key)
+    if (!b) {
+      b = { key, date: d, photos: [] }
+      map.set(key, b)
+    }
+    b.photos.push(p)
+  }
+
+  const buckets = Array.from(map.values())
+  buckets.sort((a, b) => b.date.getTime() - a.date.getTime())
+  for (const b of buckets) {
+    b.photos.sort(
+      (p1, p2) => new Date(p2.date).getTime() - new Date(p1.date).getTime(),
+    )
+  }
+
+  return buckets.map((b) => {
+    const fmt = mode === 'years' ? FMT_YEAR : FMT_MONTH
+    return {
+      key: b.key,
+      label: fmt.format(b.date),
+      sublabel: `${b.photos.length} ${b.photos.length === 1 ? 'item' : 'items'}`,
+      photos: b.photos,
+    }
+  })
 }

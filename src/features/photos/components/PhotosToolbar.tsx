@@ -1,5 +1,6 @@
 import type { CSSProperties, PropsWithChildren, ReactNode } from 'react'
-import { Children, Fragment, useState } from 'react'
+import { Children, Fragment, createContext, useContext, useState } from 'react'
+import { LayoutGroup, motion } from 'framer-motion'
 import infoCircleMediumSvg from '../../../../assets/sf-symbols/info.circle--monochrome--medium.svg?raw'
 import heartMediumSvg from '../../../../assets/sf-symbols/heart--monochrome--medium.svg?raw'
 import personCropRectangleSvg from '../../../../assets/sf-symbols/person.crop.rectangle--monochrome--medium.svg?raw'
@@ -88,6 +89,17 @@ function formatDateRange(dates: Date[]): string {
   return `${startStr} – ${endStr}`
 }
 
+/* When a `GlassCluster` wraps exactly ONE child button, the cluster paints
+ * a hover overlay that fills the whole pill (instead of just the inner
+ * 30×30 button rect). To avoid double-tinting (cluster overlay + button
+ * overlay both painting on the same pixels), the cluster signals down
+ * via context that the inner button should suppress its own overlay.
+ *
+ * Multi-button clusters set this to `false` and per-button hovers behave
+ * as before. Bare clusters (no glass chrome) also opt out — there's no
+ * resting pill to fill. */
+const SingleClusterHoverContext = createContext(false)
+
 function GlassCluster({
   children,
   style,
@@ -118,6 +130,12 @@ function GlassCluster({
 }>) {
   const [hovered, setHovered] = useState(false)
   const dividerOpacity = fadeDividersOnHover && hovered ? 0 : 1
+  /* When the cluster has exactly one child, the cluster IS the button — so
+   * the hover overlay should fill the whole pill, not just the inner 30×30
+   * rect. We render a pill-sized overlay here and tell the child button to
+   * suppress its own overlay via context. Bare clusters opt out (no resting
+   * pill to fill = no hover pill that would suddenly appear out of nothing). */
+  const fillHover = Children.count(children) === 1 && !bare
   /* macOS Tahoe 26 Liquid-Glass pill tuning.
      - Heavier backdrop (blur 20 / saturate 180%) so the refraction reads as
        glass over content rather than frosted plastic.
@@ -133,6 +151,10 @@ function GlassCluster({
     <div
       role={role}
       style={{
+        // `position: relative` establishes the containing block for the
+        // single-child fillHover overlay below. `display: inline-flex`
+        // doesn't on its own.
+        position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
         // shrink-0 so the cluster itself can never be squeezed by a narrower
@@ -165,27 +187,42 @@ function GlassCluster({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {Children.toArray(children).map((child, i) => (
-        <Fragment key={i}>
-          {i > 0 && dividers && (
-            <span
-              aria-hidden
-              style={{
-                width: 1,
-                height: 14,
-                alignSelf: 'center',
-                background: 'rgba(255,255,255,0.14)',
-                borderRadius: 0.5,
-                flexShrink: 0,
-                margin: '0 1px',
-                opacity: dividerOpacity,
-                transition: 'opacity 140ms ease',
-              }}
-            />
-          )}
-          {child}
-        </Fragment>
-      ))}
+      {fillHover && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 999,
+            background: hovered ? 'rgba(255,255,255,0.12)' : 'transparent',
+            transition: 'background 140ms ease',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      <SingleClusterHoverContext.Provider value={fillHover}>
+        {Children.toArray(children).map((child, i) => (
+          <Fragment key={i}>
+            {i > 0 && dividers && (
+              <span
+                aria-hidden
+                style={{
+                  width: 1,
+                  height: 14,
+                  alignSelf: 'center',
+                  background: 'rgba(255,255,255,0.14)',
+                  borderRadius: 0.5,
+                  flexShrink: 0,
+                  margin: '0 1px',
+                  opacity: dividerOpacity,
+                  transition: 'opacity 140ms ease',
+                }}
+              />
+            )}
+            {child}
+          </Fragment>
+        ))}
+      </SingleClusterHoverContext.Provider>
     </div>
   )
 }
@@ -240,7 +277,12 @@ function GlassButton({
 }>) {
   const [hovered, setHovered] = useState(false)
   const isCircle = hoverDiameter !== undefined
-  const showHover = hovered && !disabled
+  /* When this button is the sole child of a `GlassCluster`, the cluster
+   * paints a pill-sized hover overlay covering the whole chip. Suppress
+   * the per-button overlay in that case so the two don't double-tint
+   * the inner button rect (the layered look the user has rejected). */
+  const inFillHoverCluster = useContext(SingleClusterHoverContext)
+  const showHover = hovered && !disabled && !inFillHoverCluster
   return (
     <div
       className="flex items-center justify-center"
@@ -521,19 +563,31 @@ export function PhotosToolbar({
             // segmented control, where you can see glass above and below
             // the selection chip. Dividers are off because Tahoe's view
             // tabs are text + chip only, no separators.
+            //
+            // <LayoutGroup> scopes the framer-motion `layoutId` shared-element
+            // animation to *just these three tabs*. The active pill is a
+            // <motion.div layoutId="photos-view-tabs-pill"> rendered only on
+            // the active tab; when `viewMode` changes, framer detects the
+            // same layoutId in a new DOM position and animates the pill
+            // from the old tab to the new one (spring 480/38 — quick + firm,
+            // matches Apple's segmented-control feel, no bounce). No manual
+            // position math, no resize listeners — the layout effect handles
+            // tab-width changes automatically.
             <GlassCluster
               style={{ minHeight: 40, padding: '0 8px', gap: 4 }}
               dividers={false}
               role="tablist"
             >
-              {VIEW_TABS.map((tab) => {
-                const isActive = viewMode === tab.id
-                return (
-                  <ViewTab key={tab.id} isActive={isActive} onClick={() => setViewMode(tab.id)}>
-                    {tab.label}
-                  </ViewTab>
-                )
-              })}
+              <LayoutGroup id="photos-view-tabs">
+                {VIEW_TABS.map((tab) => {
+                  const isActive = viewMode === tab.id
+                  return (
+                    <ViewTab key={tab.id} isActive={isActive} onClick={() => setViewMode(tab.id)}>
+                      {tab.label}
+                    </ViewTab>
+                  )
+                })}
+              </LayoutGroup>
             </GlassCluster>
           )}
 
@@ -632,18 +686,20 @@ function ViewTab({
   // Anything that re-introduces a top-light gradient or a strong rim here
   // produces the "glass pill inside a glass pill" look that Tahoe Photos.app
   // explicitly does not do.
-  const bg = isActive
-    ? 'rgba(255,255,255,0.14)'
-    : hovered
-      ? 'rgba(255,255,255,0.08)'
-      : 'transparent'
+  //
+  // The active pill is a <motion.div> with a shared `layoutId`. When
+  // viewMode changes, framer-motion sees the same layoutId in a different
+  // DOM position (the new active tab) and animates the pill from the old
+  // tab to the new one. This is the slide. The hover overlay stays as a
+  // plain <div> (no layout animation needed) so multiple tabs can be
+  // hovered briefly during the slide without fighting the layoutId pill.
   const color = isActive || hovered ? '#fff' : 'rgba(255,255,255,0.68)'
   return (
     <div
       role="tab"
       aria-selected={isActive}
       tabIndex={0}
-      className="rounded-full focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(255,255,255,0.6)]"
+      className="relative rounded-full focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(255,255,255,0.6)]"
       style={{
         cursor: 'default',
         padding: '6px 12px',
@@ -651,11 +707,14 @@ function ViewTab({
         fontSize: 12,
         letterSpacing: '-0.08px',
         whiteSpace: 'nowrap',
-        background: bg,
         color,
-        fontWeight: isActive ? 600 : 500,
-        boxShadow: isActive ? 'inset 0 0 0 0.5px rgba(255,255,255,0.10)' : 'none',
-        transition: 'background 140ms ease, color 140ms ease',
+        // Keep weight constant across active/inactive to prevent the SF Pro
+        // metrics shift that would jitter the tab's text width during the
+        // slide (the pill is animated; we don't want the text underneath
+        // changing width frame-by-frame). Active is conveyed by the pill
+        // and the brighter color, not by weight.
+        fontWeight: 500,
+        transition: 'color 200ms ease',
       }}
       onClick={onClick}
       onKeyDown={(e) => {
@@ -667,7 +726,26 @@ function ViewTab({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {children}
+      {hovered && !isActive && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.08)' }}
+        />
+      )}
+      {isActive && (
+        <motion.div
+          layoutId="photos-view-tabs-pill"
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{
+            background: 'rgba(255,255,255,0.14)',
+            boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.10)',
+          }}
+          transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+        />
+      )}
+      <span className="relative">{children}</span>
     </div>
   )
 }

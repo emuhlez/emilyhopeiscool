@@ -421,12 +421,19 @@ export function PhotosWindow({
           windowWidth={rect.w}
         />
 
+        {/* Inner border overlay. Mirrors NotesWindow's chrome rim so the
+         *  two windows read as the same surface — a single soft 1 px
+         *  inset stroke at 0.22 white, sitting just inside the rounded
+         *  corner. Replaces the previous Photos-only two-stop recipe
+         *  (`0.14` top highlight + `0.06` full rim) which was meaningfully
+         *  more recessed than Notes; aligning them keeps window chrome
+         *  consistent across the two apps as both use the WINDOW_SHADOW
+         *  outer glow to do the heavy lifting on edge definition. */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             borderRadius: fullscreen ? 0 : 24,
-            boxShadow:
-              'inset 0 0.5px 0 0 rgba(255, 255, 255, 0.14), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06)',
+            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.22)',
           }}
         />
       </div>

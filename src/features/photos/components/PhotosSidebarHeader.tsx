@@ -1,5 +1,4 @@
-import type { CSSProperties, PropsWithChildren } from 'react'
-import { Children, Fragment, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { TrafficLights } from '../../../components/TrafficLights'
 import sidebarLeftMediumSvg from '../../../../assets/sf-symbols/sidebar.left--monochrome--medium.svg?raw'
 
@@ -25,7 +24,12 @@ const TRAFFIC_BLOCK_WIDTH = TRAFFIC_LIGHT_DOT * 3 + TRAFFIC_LIGHT_GAP * 2
 /** X position immediately after the traffic-lights cluster. */
 const TRAFFIC_BLOCK_END = TRAFFIC_LEFT_INSET + TRAFFIC_BLOCK_WIDTH
 
-const TOGGLE_CLUSTER_WIDTH = 46
+/** Width of the sidebar-toggle chip (Notes-style 38 × 36 pill — see the
+ *  toggle's JSX comment for the visual rationale). Used to (a) right-anchor
+ *  the toggle inside the sidebar with SIDEBAR_RIGHT_INSET breathing room
+ *  when the sidebar is open, and (b) compute the collapsed-state header
+ *  zone width below. Keep in sync with the toggle's `width` prop. */
+const TOGGLE_CLUSTER_WIDTH = 38
 const SIDEBAR_LEFT_INSET = 10
 const SIDEBAR_RIGHT_INSET = 2
 /** Static gap between traffic-lights cluster and the toggle chip (and to the
@@ -41,99 +45,15 @@ const COLLAPSED_TOGGLE_GAP = 8
 export const COLLAPSED_HEADER_ZONE_WIDTH =
   TRAFFIC_BLOCK_END + COLLAPSED_TOGGLE_GAP + TOGGLE_CLUSTER_WIDTH + COLLAPSED_TOGGLE_GAP
 
-function GlassCluster({
-  children,
-  style,
-  bare = false,
-}: PropsWithChildren<{ style?: CSSProperties; bare?: boolean }>) {
-  // Glass branch mirrors PhotosToolbar's GlassCluster tuning (Tahoe Liquid
-  // Glass: blur 20 / saturate 180, single 0.5 px top highlight, tight 1+8 px
-  // two-stop shadow, lighter 10/5/7 % gradient). Bare branch is intentional —
-  // when the sidebar is visible the toggle chip sits inside the sidebar's
-  // own glass surface, and a second glass capsule on top would re-create the
-  // glass-on-glass stacking we explicitly avoid (see the view-tabs fix).
-  return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        // shrink-0 so the sidebar-toggle chip can never be compressed by its
-        // flex parent (the header row), matching PhotosToolbar's GlassCluster.
-        flexShrink: 0,
-        gap: 1,
-        padding: '5px 8px',
-        borderRadius: 999,
-        background: bare
-          ? 'transparent'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.05) 60%, rgba(255,255,255,0.07) 100%)',
-        backdropFilter: bare ? undefined : 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: bare ? undefined : 'blur(20px) saturate(180%)',
-        boxShadow: bare
-          ? undefined
-          : 'inset 0 0.5px 0 rgba(255,255,255,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.10), 0 1px 1px rgba(0,0,0,0.18), 0 6px 14px -8px rgba(0,0,0,0.30)',
-        filter: bare ? undefined : 'url(#photos-lg-edge)',
-        isolation: 'isolate',
-        ...style,
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
-      {Children.toArray(children).map((child, i) => (
-        <Fragment key={i}>{child}</Fragment>
-      ))}
-    </div>
-  )
-}
-
-function GlassButton({
-  onClick,
-  children,
-  width = 30,
-  height = 30,
-}: PropsWithChildren<{ onClick?: () => void; width?: number; height?: number }>) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <div
-      className="flex items-center justify-center"
-      style={{
-        // Pin the icon button at its full hit target — see the matching note
-        // in PhotosToolbar's GlassButton. As a flex child with flex-basis:
-        // auto it would otherwise be free to compress below width/height.
-        position: 'relative',
-        flexShrink: 0,
-        width,
-        height,
-        minWidth: width,
-        minHeight: height,
-        cursor: 'default',
-        color: 'rgba(255,255,255,0.92)',
-      }}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div
-        aria-hidden
-        style={{
-          // Hover overlay is structurally pinned to width×height (centered),
-          // not derived from the outer box — identical pattern to
-          // PhotosToolbar's GlassButton so both 30×30 chips animate the same
-          // hover pill regardless of any parent layout pressure.
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width,
-          height,
-          transform: 'translate(-50%, -50%)',
-          borderRadius: Math.min(width, height) / 2,
-          background: hovered ? 'rgba(255,255,255,0.12)' : 'transparent',
-          transition: 'background 140ms ease',
-          pointerEvents: 'none',
-        }}
-      />
-      <div className="relative flex items-center justify-center">{children}</div>
-    </div>
-  )
-}
+/* GlassCluster / GlassButton / SingleClusterHoverContext used to live here
+ * — local copies of the same primitives in PhotosToolbar — to wrap the
+ * sidebar-toggle chip in a Tahoe Liquid Glass capsule. They were removed
+ * when the toggle was rebuilt to match Notes' chrome chip pixel-for-pixel
+ * (see the JSX comment on the toggle below for the rationale). The
+ * primitives still exist in PhotosToolbar for the toolbar's multi-button
+ * clusters; if a future control in this file needs a glass cluster again,
+ * pull from there (or the eventual shared primitive) rather than
+ * resurrecting a parallel copy. */
 
 export function PhotosSidebarHeader({
   onDragStart,
@@ -144,7 +64,7 @@ export function PhotosSidebarHeader({
   sidebarCollapsed,
   sidebarWidth,
 }: {
-  onDragStart: (e: React.PointerEvent) => void
+  onDragStart: (e: ReactPointerEvent) => void
   onClose?: () => void
   onMinimize?: () => void
   onFullscreen?: () => void
@@ -217,16 +137,47 @@ export function PhotosSidebarHeader({
           style={{ marginLeft: toggleGap }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <GlassCluster bare={!sidebarCollapsed}>
-            <GlassButton width={30} height={30} onClick={onToggleSidebar}>
-              <span
-                aria-label="Hide or show sidebar"
-                className="inline-flex shrink-0 [&>svg]:block"
-                style={{ width: 20, height: 20 }}
-                dangerouslySetInnerHTML={{ __html: sidebarLeftMediumSvg }}
-              />
-            </GlassButton>
-          </GlassCluster>
+          {/* Sidebar toggle. Chip styling mirrors NotesToolbar's sidebar
+           *  toggle pixel-for-pixel — 38 × 36 pill, `rgba(60,60,60,0.30)`
+           *  fill at rest, `rgba(60,60,60,0.75)` on hover, and the same
+           *  diagonal-bevel inner-shadow recipe (top-right + bottom-left
+           *  white highlight) so the same control reads identically
+           *  whether you're in Notes or Photos. The icon glyph is the
+           *  SF Symbol `sidebar.left.medium` (per the
+           *  use-sf-symbols-only project rule) sized to 20 × 20 — same
+           *  proportion as Notes' raster sidebar icon (16 × 12 inside a
+           *  38 × 36 frame), but a clean vector path instead of a baked
+           *  PNG.
+           *
+           *  Replaces the previous `GlassCluster` + `GlassButton` Tahoe
+           *  Liquid Glass treatment, which sized to 42 × 40 and used a
+           *  blurred translucent capsule. That read as a different
+           *  control family next to Notes' simpler chrome rim, so the
+           *  two apps' toggles felt like they belonged to different
+           *  apps. The `bare`/`sidebarCollapsed` distinction is
+           *  intentionally gone — this chip looks the same on both the
+           *  sidebar's own glass surface and on photo content, so we
+           *  don't need to swap variants. */}
+          <div
+            onClick={onToggleSidebar}
+            aria-label="Hide or show sidebar"
+            className="flex items-center justify-center rounded-full transition-colors hover:bg-[rgba(60,60,60,0.75)]"
+            style={{
+              cursor: 'default',
+              width: 38,
+              height: 36,
+              background: 'rgba(60, 60, 60, 0.30)',
+              boxShadow:
+                'inset 1px -1px 0 0 rgba(255,255,255,0.12), inset -1px 1px 0 0 rgba(255,255,255,0.12)',
+              color: 'rgba(255,255,255,0.92)',
+            }}
+          >
+            <span
+              className="inline-flex shrink-0 [&>svg]:block"
+              style={{ width: 20, height: 20 }}
+              dangerouslySetInnerHTML={{ __html: sidebarLeftMediumSvg }}
+            />
+          </div>
         </div>
       </div>
     </div>
