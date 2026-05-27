@@ -1,0 +1,332 @@
+.overlay {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 400px;
+  min-width: 280px;
+  pointer-events: auto;
+  transition: left 0.2s ease, top 0.2s ease, bottom 0.2s ease, transform 0.2s ease;
+}
+
+.progressIndicator {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.progressIndicatorCentered {
+  left: 50%;
+  bottom: 24px;
+  top: auto;
+  transform: translateX(-50%);
+}
+
+.progressBubbleIcon {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.progressBubbleInnerIcon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+
+
+/* Expanding bubble on hover — expands right from the icon */
+.progressBubble {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0;
+  background: var(--bg-surface200);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: max-width 0.25s ease, opacity 0.15s ease, padding 0.25s ease;
+  pointer-events: none;
+}
+
+.progressIndicator:hover .progressBubble {
+  max-width: 280px;
+  padding: 4px 12px 4px 10px;
+  opacity: 1;
+}
+
+.progressBubbleWarning {
+  flex-shrink: 0;
+}
+
+.progressBubbleText {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--content-default);
+}
+
+/* Expanded card on click — shows full task */
+.progressIndicatorExpanded {
+  z-index: 5;
+}
+
+.progressExpanded {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 200px;
+  max-width: 320px;
+  padding: 8px 14px 8px 10px;
+  background: var(--bg-surface200);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.progressExpandedText {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--content-default);
+  line-height: 1.5;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+/* Viewport input row; collapsed assistant row uses actual design: prompts/Message-Field.svg */
+.inputRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 400px;
+  min-width: 280px;
+  min-height: 48px;
+  padding: 8px 12px 8px 0;
+  box-sizing: border-box;
+  background: var(--bg-surface100);
+  border: 1px solid rgba(208, 217, 251, 0.24);
+  border-radius: 16px;
+  box-shadow:
+    0 2px 2px rgba(4, 4, 8, 0.25),
+    0 10px 10px rgba(4, 4, 8, 0.25),
+    0 16px 16px rgba(4, 4, 8, 0.25);
+  overflow: visible;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.inputRowInner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.inputRow:focus-within {
+  outline: none;
+  box-shadow:
+    0 2px 2px rgba(4, 4, 8, 0.25),
+    0 10px 10px rgba(4, 4, 8, 0.25),
+    0 16px 16px rgba(4, 4, 8, 0.25);
+}
+
+/* Override global :focus-visible so the input row doesn't get a blue outline */
+.inputRow :focus-visible {
+  outline: none;
+}
+
+.inputIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding-left: 16px;
+  flex-shrink: 0;
+  color: #f7f7f8;
+}
+
+.inputIconImg {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.sendButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(208, 217, 251, 0.12);
+  border: none;
+  border-radius: 9999px;
+  color: var(--content-default);
+  cursor: pointer;
+}
+
+.sendButton:hover:not(:disabled) {
+  background: var(--content-hover);
+}
+
+.sendButton:active:not(:disabled) {
+  background: var(--content-pressed);
+}
+
+.sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sendButtonIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+/* Flex-wrap container for pills + textarea */
+.pillsAndInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  max-height: 120px;
+  padding: 4px 44px 4px 12px; /* right padding so text doesn't go under send button */
+  background: transparent;
+  border: none;
+  color: var(--content-emphasis, #f7f7f8);
+  font-size: 12px;
+  line-height: 20px;
+  outline: none;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+}
+
+.shortcutHint {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(188, 190, 200, 0.8);
+  padding: 0 12px;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+/* Chat history dropdown trigger — text + chevron, same look as toolbar Test dropdown */
+.viewportChatTrigger {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  min-width: 60px;
+  max-width: 120px;
+  height: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--content-default);
+  background: var(--content-hover);
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s ease), color var(--transition-fast, 0.15s ease);
+}
+
+.viewportChatTrigger:hover {
+  background: var(--content-hover);
+  color: var(--content-emphasis);
+}
+
+.viewportChatTrigger:active {
+  background: var(--content-pressed);
+}
+
+.viewportChatTriggerLabel {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewportChatTrigger[data-open="true"] svg {
+  transform: rotate(180deg);
+}
+
+.viewportChatTrigger svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  transition: transform var(--transition-fast, 0.15s ease);
+}
+
+/* Portal overlay for chat dropdown – same pattern as DockablePanel history dropdown */
+.viewportChatDropdownOverlay {
+  position: fixed;
+  z-index: 10010;
+}
+
+.viewportChatDropdown {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Fade only the currently selected chat title (the one carrying the "Current"
+   badge) with a gradient mask instead of an ellipsis — and only when the text
+   actually overflows. The mask is always applied, but short labels never
+   reach the fade zone so the effect is invisible until the title is too long
+   to fit. */
+.viewportChatDropdown button:has(> span:last-child > span) > span:first-child {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 56px),
+    transparent 100%
+  );
+          mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 56px),
+    transparent 100%
+  );
+}
+

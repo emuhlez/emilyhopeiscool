@@ -1,0 +1,405 @@
+.dockLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  overflow-x: hidden;
+  gap: 0;
+  background: var(--bg-darkest);
+  position: relative;
+  max-width: 100vw;
+}
+
+/* Resize handles – thin divider, subtle on hover, cursor indicates direction */
+.resizeHandle {
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 0.12s ease;
+  z-index: 2;
+}
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--border-subtle);
+}
+
+.resizeHandle_e,
+.resizeHandle_w {
+  width: 6px;
+  min-width: 6px;
+  cursor: ew-resize;
+}
+.resizeHandle_n,
+.resizeHandle_s {
+  height: 1px;
+  min-height: 1px;
+  cursor: ns-resize;
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-surface100);
+}
+
+.leftColumn.emptyColumn {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: visible; /* So drop targets still work when dragging */
+  border: none;
+  pointer-events: none; /* Prevent interaction when empty */
+}
+
+.leftColumn.leftCollapsed {
+  overflow: hidden;
+}
+
+.leftColumn.leftCollapsed .dockZone {
+  align-items: flex-start;
+}
+
+.leftColumn.emptyColumn > * {
+  pointer-events: auto; /* Re-enable for drop zones */
+}
+
+.resizeHandleLeft {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  min-width: 6px;
+}
+
+.resizeHandleRight {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  min-width: 6px;
+}
+
+.resizeHandleCenterBottom,
+.resizeHandleRightSplit {
+  flex-shrink: 0;
+  height: 1px;
+  min-height: 1px;
+}
+
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 336px;
+  min-width: 336px;
+  position: relative;
+  background: var(--bg-panel);
+}
+
+/* Sticky layer: widgets can be placed anywhere over the viewport */
+.stickyLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.stickyLayer > * {
+  pointer-events: auto;
+}
+
+.stickyPanel {
+  position: absolute;
+  width: var(--sticky-panel-width, 336px);
+  max-width: calc(100% - 32px);
+  height: 70vh;
+  min-height: 120px;
+  max-height: 70vh;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: max-height 0.65s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Collapsed: smaller max-height so panel stays anchored and grows seamlessly on expand */
+.stickyPanel.stickyPanelCollapsed {
+  height: auto;
+  min-height: auto;
+  max-height: 22vh;
+}
+
+/* AI Assistant collapsed: no chrome so only Figma MessageField (1322-2134) is visible */
+.stickyPanel.stickyPanelAiCollapsed {
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  max-height: none;
+}
+
+.stickyResizeHandle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  min-width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+/* Right column – proper docked panel (like left column) */
+.rightColumnOverlay {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.rightTop {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+}
+
+.rightBottom {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+}
+
+.rightColumn.emptyColumn {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: visible; /* So drop targets work when dragging */
+  border: none;
+  pointer-events: none;
+}
+
+.rightColumn.emptyColumn > * {
+  pointer-events: auto; /* Re-enable for drop zones */
+}
+
+.centerColumnWrapper {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.centerColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+
+.centerColumn.emptyColumn {
+  min-height: 300px;
+}
+
+.centerTop {
+  flex: 1;
+  min-height: 300px;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+}
+
+.centerBottom {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  min-height: 0;
+  transition: height 0.15s ease, min-height 0.15s ease, overflow 0.15s ease;
+}
+
+.centerBottom.centerBottomHidden {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: none;
+}
+
+.centerBottom.centerBottomCollapsed {
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.centerBottom.centerBottomCollapsed .dockZone {
+  align-items: flex-start;
+}
+
+.dockZone {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dockZone.empty {
+  flex: 0 0 0;
+  min-width: 0;
+  min-height: 0;
+  width: 0;
+  overflow: visible;
+  background: var(--bg-panel);
+}
+
+
+.dockZone.left {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.dockZone.right-top,
+.dockZone.right-bottom {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.dockZone.right-top {
+  border-left: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dockZone.right-bottom {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.dockZone.center-top {
+  flex: 1;
+  background: var(--bg-dark);
+  flex-direction: row;
+}
+
+.dockZone.center-bottom {
+  flex: 1;
+  min-width: 0;
+}
+
+.dockZone.center-bottom > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Drag overlay styles – dragOver is added as a literal class by DockablePanel JS */
+.dockZone:global(.dragOver) {
+  background: rgba(208, 217, 251, 0.1) !important;
+  border: 2px dashed rgba(208, 217, 251, 0.4) !important;
+}
+
+/* Edge highlight strips: visual dock indicators shown during any panel drag.
+   Detection is proximity-based (not elementFromPoint), so pointer-events: none.
+   Always visible during drag with a subtle glow; brighter on proximity hover. */
+.dockEdge {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(130, 160, 255, 0.06);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dockEdge[data-edge="bottom"] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  border-top: 2px solid rgba(130, 160, 255, 0.15);
+}
+
+.dockEdge[data-edge="right"] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 48px;
+  border-left: 2px solid rgba(130, 160, 255, 0.15);
+}
+
+.dockEdge[data-edge="left"] {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  border-right: 2px solid rgba(130, 160, 255, 0.15);
+}
+
+.dockEdge[data-edge="top"] {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 48px;
+  border-bottom: 2px solid rgba(130, 160, 255, 0.15);
+}
+
+/* Highlighted state when cursor is near the edge during drag */
+.dockEdge:global(.dragOver) {
+  background: rgba(130, 160, 255, 0.18);
+  box-shadow: inset 0 0 20px rgba(130, 160, 255, 0.4);
+}
+
+.dockEdge[data-edge="bottom"]:global(.dragOver) {
+  border-top-color: rgba(130, 160, 255, 0.7);
+}
+
+.dockEdge[data-edge="right"]:global(.dragOver) {
+  border-left-color: rgba(130, 160, 255, 0.7);
+}
+
+.dockEdge[data-edge="left"]:global(.dragOver) {
+  border-right-color: rgba(130, 160, 255, 0.7);
+}
+
+.dockEdge[data-edge="top"]:global(.dragOver) {
+  border-bottom-color: rgba(130, 160, 255, 0.7);
+}
+
+/* Center zone indicator: drop here to float/overlay on viewport */
+.dockCenter {
+  position: absolute;
+  z-index: 19;
+  pointer-events: none;
+  top: 48px;
+  left: 48px;
+  right: 48px;
+  bottom: 48px;
+  border-radius: 8px;
+  border: 2px dashed rgba(130, 160, 255, 0.08);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dockCenter:global(.dragOver) {
+  background: rgba(130, 160, 255, 0.08);
+  border-color: rgba(130, 160, 255, 0.35);
+  box-shadow: inset 0 0 30px rgba(130, 160, 255, 0.15);
+}
+
