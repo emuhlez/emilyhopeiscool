@@ -3,7 +3,6 @@ import {
   Square,
   X,
   Sparkles,
-  Cog,
 } from 'lucide-react'
 import { ExpandDownIcon } from '../shared/ExpandIcons'
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -14,7 +13,6 @@ import { MenuDropdown, MenuItem } from '../shared/MenuDropdown'
 import { useAgentChat } from '../../ai/use-agent-chat'
 import { isAIIntent } from '../../ai/detect-ai-intent'
 import { parseResponse } from '../../ai/parse-response'
-import { SettingsPanel } from '../SettingsPanel/SettingsPanel'
 import styles from './Toolbar.module.css'
 import searchIconImg from '../../../images/search.png'
 import annotationIcon from '../../../images/Annotation Icon.png'
@@ -210,8 +208,6 @@ export function Toolbar() {
 
   const dockWidget = useDockingStore((s) => s.dockWidget)
   const undockWidget = useDockingStore((s) => s.undockWidget)
-  const settingsPanelOpen = useDockingStore((s) => s.settingsPanelOpen)
-  const toggleSettingsPanel = useDockingStore((s) => s.toggleSettingsPanel)
   const aiAssistant = useDockingStore((s) => s.widgets['ai-assistant'])
   const aiPanelVisible = !!aiAssistant
   const lastAIZoneRef = useRef<DockZone>('left')
@@ -530,20 +526,6 @@ export function Toolbar() {
           </div>
           <div>
             <img src={notificationIcon} alt="Notifications" width={16} height={16} />
-          </div>
-          <div
-            className={`${styles.settingsWrap} ${settingsPanelOpen ? styles.activeToolbarIcon : ''}`}
-          >
-            <button
-              type="button"
-              className={styles.groupIconButton}
-              title="Settings"
-              aria-label="Settings"
-              onClick={toggleSettingsPanel}
-            >
-              <Cog size={16} strokeWidth={1.75} />
-            </button>
-            <SettingsPanel />
           </div>
         </div>
         <div className={styles.group}>

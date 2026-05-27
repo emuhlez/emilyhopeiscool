@@ -5,14 +5,13 @@ import {
   MessageSquare,
   MoreVertical,
   Plus,
-  Settings,
   Square,
 } from 'lucide-react'
-import type { EditorState } from '../../types'
+import type { DockZone, EditorState } from '../../types'
 import { publicUrl } from '../../utils/assetUrl'
 import { useDockingStore } from '../../store/dockingStore'
 import { useEditorStore } from '../../store/editorStore'
-import { SettingsPanel } from '../SettingsPanel/SettingsPanel'
+import nebulaIcon from '../../../icons/nebula.svg'
 import styles from './Ribbon.module.css'
 
 const ICON_RIBBON_SIZE = 24
@@ -162,11 +161,10 @@ function SpinboxPair() {
 export function Ribbon() {
   const tabsId = useId()
   const [activeTab, setActiveTab] = useState<RibbonTab>('Home')
-  const settingsPanelOpen = useDockingStore((s) => s.settingsPanelOpen)
-  const toggleSettingsPanel = useDockingStore((s) => s.toggleSettingsPanel)
   const studioMode = useDockingStore((s) => s.studioMode)
   const inspectorWidget = useDockingStore((s) => s.widgets.inspector)
   const assetsWidget = useDockingStore((s) => s.widgets.assets)
+  const aiAssistantWidget = useDockingStore((s) => s.widgets['ai-assistant'])
   const centerBottomCollapsed = useDockingStore((s) => s.centerBottomCollapsed)
   const toggleCenterBottomCollapsed = useDockingStore((s) => s.toggleCenterBottomCollapsed)
   const dockWidget = useDockingStore((s) => s.dockWidget)
@@ -174,6 +172,21 @@ export function Ribbon() {
   const setRibbonInspectorExitAnimating = useDockingStore((s) => s.setRibbonInspectorExitAnimating)
   const ribbonInspectorExitAnimating = useDockingStore((s) => s.ribbonInspectorExitAnimating)
   const ribbonInspectorDismissTimerRef = useRef<number | null>(null)
+
+  // Remember the zone the AI Assistant was last docked in so toggling it
+  // closed → open re-opens to the same spot the user had it. Falls back to
+  // 'right-bottom' (ribbon mode's default per dockingStore.setStudioMode).
+  const lastAIZoneRef = useRef<DockZone>('right-bottom')
+  const aiPanelVisible = !!aiAssistantWidget
+
+  const toggleAIAssistant = useCallback(() => {
+    if (aiPanelVisible) {
+      lastAIZoneRef.current = aiAssistantWidget?.zone ?? 'right-bottom'
+      undockWidget('ai-assistant')
+    } else {
+      dockWidget('ai-assistant', lastAIZoneRef.current)
+    }
+  }, [aiPanelVisible, aiAssistantWidget, dockWidget, undockWidget])
 
   useEffect(() => {
     return () => {
@@ -337,17 +350,29 @@ export function Ribbon() {
         </div>
 
         <div className={styles.userRail}>
-          <div className={`${styles.settingsWrap} ${settingsPanelOpen ? styles.settingsWrapOpen : ''}`}>
-            <button
-              type="button"
-              className={styles.iconBtn24}
-              aria-label="Settings"
-              onClick={toggleSettingsPanel}
-            >
-              <Settings size={ICON_MEZZANINE} aria-hidden strokeWidth={2} />
-            </button>
-            <SettingsPanel />
-          </div>
+          {/* Static Nebula toggle for the AI Assistant. Intentionally
+           *  uses no .nebulaAnimating / pillIconSpin classes — the icon
+           *  is the launcher affordance, not a status indicator, so it
+           *  must sit still. Animated variants live elsewhere (the
+           *  MessageList "Thinking..." status row + BackgroundTaskDrawer
+           *  task pill) and are scoped to that meaning. */}
+          <button
+            type="button"
+            className={`${styles.iconBtn24} ${aiPanelVisible ? styles.nebulaToggleActive : ''}`}
+            aria-label="AI Assistant"
+            aria-pressed={aiPanelVisible}
+            title="AI Assistant"
+            onClick={toggleAIAssistant}
+          >
+            <img
+              src={nebulaIcon}
+              alt=""
+              aria-hidden="true"
+              width={ICON_MEZZANINE}
+              height={ICON_MEZZANINE}
+              className={styles.nebulaToggleIcon}
+            />
+          </button>
           <button type="button" className={styles.iconBtn24} aria-label="Notifications">
             <Bell size={ICON_MEZZANINE} aria-hidden strokeWidth={2} />
           </button>

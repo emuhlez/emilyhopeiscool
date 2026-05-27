@@ -516,11 +516,6 @@
   color: var(--content-muted);
 }
 
-/* Settings dropdown anchor (mirrors Ribbon settingsWrap) */
-.settingsWrap {
-  position: relative;
-}
-
 /* Active toolbar icon (e.g., AI Assistant toggle) */
 .activeToolbarIcon {
   background: rgba(208, 217, 251, 0.16);

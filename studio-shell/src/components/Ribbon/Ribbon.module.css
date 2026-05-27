@@ -168,6 +168,24 @@
   background: var(--content-pressed);
 }
 
+/* Static Nebula AI Assistant toggle in the userRail. Mirrors the
+   pressed-state visual of .iconBtnRibbon[data-active='true'] so the
+   "panel is open" cue is consistent across ribbon icon buttons.
+   No animations applied — the launcher icon must sit still; rotation /
+   glow are reserved for the status-indicator + task-pill Nebulas
+   elsewhere in the AI Assistant. */
+.nebulaToggleActive {
+  background: var(--content-pressed);
+}
+
+.nebulaToggleIcon {
+  display: block;
+  width: var(--ribbon-mezzanine-icon-size, 16px);
+  height: var(--ribbon-mezzanine-icon-size, 16px);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .tabsRail {
   position: absolute;
   left: 0;
@@ -271,17 +289,6 @@
 
 .moreRotate {
   transform: rotate(-90deg);
-}
-
-.settingsWrap {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-}
-
-.settingsWrapOpen {
-  background: var(--content-pressed);
 }
 
 .rowDivider {

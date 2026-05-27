@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import type { UIMessage } from '@ai-sdk/react'
 import { MessageBubble } from './MessageBubble'
+import nebulaIcon from '../../../icons/nebula-viewport.svg'
 import styles from './AIAssistant.module.css'
 
 interface MessageListProps {
@@ -85,7 +86,13 @@ export function MessageList({ messages, isLoading, pendingToolCount, onFeedback,
       ))}
 
       {isLoading && pendingToolCount === 0 && (
-        <div className={styles.status}>
+        <div className={`${styles.status} ${styles.nebulaAnimating}`}>
+          <img
+            src={nebulaIcon}
+            alt=""
+            aria-hidden="true"
+            className={styles.statusNebulaIcon}
+          />
           <span className={styles.statusText}>
             {idleStatusPhrases[statusIndex]}
           </span>

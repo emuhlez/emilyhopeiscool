@@ -1,6 +1,4 @@
 import { useMemo } from 'react'
-import { useDockingStore } from './store/dockingStore'
-import { Toolbar } from './components/Toolbar/Toolbar'
 import { Ribbon } from './components/Ribbon/Ribbon'
 import { Hierarchy } from './components/Hierarchy/Hierarchy'
 import { Viewport } from './components/Viewport/Viewport'
@@ -14,8 +12,6 @@ import { DockablePanel } from './components/shared/DockablePanel'
 import styles from './App.module.css'
 
 function App() {
-  const studioMode = useDockingStore((s) => s.studioMode)
-
   // Memoize widgetMap to prevent unnecessary remounts when docking layout changes
   const widgetMap = useMemo(() => ({
     inspector: <Inspector />,
@@ -30,9 +26,12 @@ function App() {
     componentGallery: <ComponentGallery />,
   }), [])
 
+  // Studio is locked to ribbon mode — see dockingStore.studioMode for the
+  // enforcement rationale. The Toolbar (shell-mode chrome) is intentionally
+  // not rendered here.
   return (
     <div className={styles.editor}>
-      {studioMode === 'ribbon' ? <Ribbon /> : <Toolbar />}
+      <Ribbon />
       <DockLayout
         leftZone={<DockZoneRenderer zone="left" widgetMap={widgetMap} />}
         centerTopZone={<DockZoneRenderer zone="center-top" widgetMap={widgetMap} />}

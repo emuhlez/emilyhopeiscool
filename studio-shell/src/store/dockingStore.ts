@@ -77,10 +77,6 @@ interface DockingStore {
   inspectorBodyCollapsed: boolean
   setInspectorBodyCollapsed: (collapsed: boolean) => void
 
-  /** Settings dropdown from ribbon gear (studio layout toggle). */
-  settingsPanelOpen: boolean
-  setSettingsPanelOpen: (open: boolean) => void
-  toggleSettingsPanel: () => void
   /** Ribbon: inspector slide-out exit animation runs before {@link undockWidget}. */
   ribbonInspectorExitAnimating: boolean
   setRibbonInspectorExitAnimating: (value: boolean) => void
@@ -223,23 +219,21 @@ export const useDockingStore = create<DockingStore>((set, get) => ({
     const state = get()
     state.dockWidget('ai-assistant', mode === 'right' ? 'left' : 'left')
   },
-  studioMode: 'shell',
+  // Roblox Studio inside this desktop is locked to ribbon mode — the shell
+  // layout is intentionally unreachable so the embedded studio always reads
+  // as the same surface. The setter ignores 'shell' so any stray caller
+  // (legacy code, future ports) can't flip the mode back; the settings cog
+  // and its dropdown panel that previously hosted the toggle have also
+  // been removed.
+  studioMode: 'ribbon',
   setStudioMode: (mode) => {
-    set({ studioMode: mode, ribbonInspectorExitAnimating: false })
+    if (mode !== 'ribbon') return
+    set({ studioMode: 'ribbon', ribbonInspectorExitAnimating: false })
     const state = get()
-    if (mode === 'ribbon') {
-      state.dockWidget('inspector', 'right-bottom')
-      state.dockWidget('ai-assistant', 'right-bottom')
-      set({ assistantPanelMode: 'right', aiAssistantBodyCollapsed: false })
-    } else {
-      state.dockWidget('inspector', 'right-top')
-      state.dockWidget('ai-assistant', 'right-top')
-      set({ assistantPanelMode: 'menu' })
-    }
+    state.dockWidget('inspector', 'right-bottom')
+    state.dockWidget('ai-assistant', 'right-bottom')
+    set({ assistantPanelMode: 'right', aiAssistantBodyCollapsed: false })
   },
-  settingsPanelOpen: false,
-  setSettingsPanelOpen: (open) => set({ settingsPanelOpen: open }),
-  toggleSettingsPanel: () => set((state) => ({ settingsPanelOpen: !state.settingsPanelOpen })),
   ribbonInspectorExitAnimating: false,
   setRibbonInspectorExitAnimating: (value) => set({ ribbonInspectorExitAnimating: value }),
   aiSidebarOpen: false,
