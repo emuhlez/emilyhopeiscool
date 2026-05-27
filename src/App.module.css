@@ -1,0 +1,47 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100vw;
+  background: var(--bg-darkest);
+  overflow: hidden;
+  overflow-x: hidden;
+}
+
+.leftZone {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.centerTopZone {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.centerBottomZone {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-width: 0;
+}
+
+.centerBottomZone > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.rightZone {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+
+
+
