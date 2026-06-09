@@ -68,11 +68,14 @@ export default defineConfig(async () => {
                 json(data: unknown) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)) },
                 send(data: string) { res.end(data) },
               }
-              handler(fakeReq as any, fakeRes as any)
+              handler(
+                fakeReq as unknown as Parameters<typeof handler>[0],
+                fakeRes as unknown as Parameters<typeof handler>[1],
+              )
             })
-          } catch (e: any) {
+          } catch (e) {
             res.statusCode = 500
-            res.end(JSON.stringify({ error: e.message }))
+            res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
           }
         })
       },

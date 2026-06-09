@@ -127,7 +127,9 @@ export function NotesWindow({
   })
 
   const rectRef = useRef(rect)
-  rectRef.current = rect
+  useEffect(() => {
+    rectRef.current = rect
+  })
 
   const closeApp = useAppStore((s) => s.closeApp)
   const setFullscreenApp = useAppStore((s) => s.setFullscreenApp)
@@ -189,7 +191,9 @@ export function NotesWindow({
   /* ── drag & resize ── */
 
   const sidebarWidthRef = useRef(sidebarWidth)
-  sidebarWidthRef.current = sidebarWidth
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth
+  })
 
   const dragRef = useRef<{
     startX: number

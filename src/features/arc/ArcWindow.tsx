@@ -8,20 +8,40 @@ import { WINDOW_DROP_SHADOW } from '../../styles/window-shadow'
 
 /* ─── helpers ─── */
 
+/* Minimal surface of Electron's <webview> element — just the imperative methods
+ * we call. The 'webview' intrinsic is declared as a plain HTMLElement (see
+ * src/types/electron.d.ts), so we narrow `.current` to this when invoking them. */
+interface WebviewTag extends HTMLElement {
+  loadURL(url: string): Promise<void>
+  goBack(): void
+  goForward(): void
+  canGoBack(): boolean
+  canGoForward(): boolean
+  reload(): void
+  stop(): void
+  insertCSS(css: string): Promise<string>
+}
+
 function useFaviconColor(url: string, fallback = '#1f1f1f'): string {
   const [color, setColor] = useState(fallback)
 
+  /* Reset to the fallback during render whenever the URL changes, rather than
+   * calling setColor synchronously inside the effect (which triggers a
+   * cascading render). The async favicon-color computation below then paints
+   * the real color once the icon loads. */
+  const [trackedUrl, setTrackedUrl] = useState(url)
+  if (url !== trackedUrl) {
+    setTrackedUrl(url)
+    setColor(fallback)
+  }
+
   useEffect(() => {
-    if (!url) {
-      setColor(fallback)
-      return
-    }
+    if (!url) return
 
     let hostname: string
     try {
       hostname = new URL(url).hostname
     } catch {
-      setColor(fallback)
       return
     }
 
@@ -809,10 +829,24 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
   const [showNew, setShowNew] = useState(false)
   const embedUrl = getYouTubeEmbedUrl(url)
   const prevUrlRef = useRef<string | null>(null)
+  /* Latest blobUrl, read inside the loader effect to seed the crossfade without
+   * making blobUrl an effect dependency — depending on it would re-run the
+   * effect every time it sets blobUrl, causing a reload loop. */
+  const blobUrlRef = useRef(blobUrl)
+  useEffect(() => {
+    blobUrlRef.current = blobUrl
+  })
 
   // Trigger prefetch on mount
   useEffect(() => { prefetchSavedLinks() }, [])
 
+  /* eslint-disable react-hooks/set-state-in-effect --
+   * This effect orchestrates the proxied-iframe double-buffer. When the URL
+   * changes it must synchronously reset/seed loading + blob state before kicking
+   * off the async proxy fetch, and re-seed prevBlobUrl so the previous frame
+   * stays visible during the crossfade. These synchronous resets are intentional
+   * and tightly coupled to the fetch; the rule's render-time/key alternatives
+   * would tear down the previous <iframe> and break the crossfade. */
   useEffect(() => {
     if (embedUrl) {
       setBlobUrl(null)
@@ -825,7 +859,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
     // Check cache first
     const cached = proxyCache.get(url)
     if (cached) {
-      setPrevBlobUrl(blobUrl)
+      setPrevBlobUrl(blobUrlRef.current)
       setBlobUrl(cached)
       setStatus('loaded')
       setShowNew(false)
@@ -837,7 +871,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
     setStatus('loading')
     setShowNew(false)
     // Keep previous blob visible during load
-    if (blobUrl) setPrevBlobUrl(blobUrl)
+    if (blobUrlRef.current) setPrevBlobUrl(blobUrlRef.current)
     let cancelled = false
 
     fetch(`/api/iframe-check`, {
@@ -865,6 +899,7 @@ function ProxiedIframe({ url, dragging }: { url: string; dragging: boolean }) {
       // Don't revoke - it's in the cache now
     }
   }, [url, embedUrl])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Crossfade: once new iframe loads, reveal it
   const handleNewLoad = () => {
@@ -1227,7 +1262,9 @@ export function ArcWindow({
   })
 
   const rectRef = useRef(rect)
-  rectRef.current = rect
+  useEffect(() => {
+    rectRef.current = rect
+  })
 
   /* ── navigation state (works for both webview & iframe) ── */
   const INITIAL_URL = 'https://www.youtube.com/watch?v=8IcYpOl4Sdk'
@@ -1242,9 +1279,11 @@ export function ArcWindow({
   const listenersAttached = useRef(false)
 
   const historyRef = useRef(history)
-  historyRef.current = history
   const historyIndexRef = useRef(historyIndex)
-  historyIndexRef.current = historyIndex
+  useEffect(() => {
+    historyRef.current = history
+    historyIndexRef.current = historyIndex
+  })
 
   const navigate = useCallback((newUrl: string) => {
     const idx = historyIndexRef.current
@@ -1252,14 +1291,14 @@ export function ArcWindow({
     setHistoryIndex(idx + 1)
 
     if (isElectron) {
-      const wv = webviewRef.current as any
+      const wv = webviewRef.current as WebviewTag | null
       if (wv?.loadURL) wv.loadURL(newUrl)
     }
   }, [])
 
   const goBack = useCallback(() => {
     if (isElectron) {
-      const wv = webviewRef.current as any
+      const wv = webviewRef.current as WebviewTag | null
       if (wv?.canGoBack?.()) wv.goBack()
     }
     const idx = historyIndexRef.current
@@ -1268,7 +1307,7 @@ export function ArcWindow({
 
   const goForward = useCallback(() => {
     if (isElectron) {
-      const wv = webviewRef.current as any
+      const wv = webviewRef.current as WebviewTag | null
       if (wv?.canGoForward?.()) wv.goForward()
     }
     const idx = historyIndexRef.current
@@ -1277,7 +1316,9 @@ export function ArcWindow({
 
   // Listen for navigation events from proxied iframes
   const navigateRef = useRef(navigate)
-  navigateRef.current = navigate
+  useEffect(() => {
+    navigateRef.current = navigate
+  })
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -1293,7 +1334,7 @@ export function ArcWindow({
   // Attach webview event listeners (Electron only)
   useEffect(() => {
     if (!isElectron) return
-    const wv = webviewRef.current as any
+    const wv = webviewRef.current as WebviewTag | null
     if (!wv || listenersAttached.current) return
 
     const onStart = () => setWebviewLoading(true)
@@ -1302,7 +1343,7 @@ export function ArcWindow({
       wv.insertCSS('html, body { max-width: 100vw !important; overflow-x: hidden !important; }').catch(() => {})
     }
 
-    const onDidNavigate = (e: any) => {
+    const onDidNavigate = (e: Event & { url?: string }) => {
       if (e.url && e.url !== 'about:blank') {
         const idx = historyIndexRef.current
         const prev = historyRef.current
@@ -1323,14 +1364,14 @@ export function ArcWindow({
 
   const refreshWebview = useCallback(() => {
     setWebviewLoading(true)
-    const wv = webviewRef.current as any
+    const wv = webviewRef.current as WebviewTag | null
     if (wv?.reload) wv.reload()
   }, [])
 
   const stopWebview = useCallback(() => {
     setWebviewLoading(false)
     if (isElectron) {
-      const wv = webviewRef.current as any
+      const wv = webviewRef.current as WebviewTag | null
       if (wv?.stop) wv.stop()
     }
   }, [])
@@ -1416,7 +1457,9 @@ export function ArcWindow({
   const topbarColor = useFaviconColor(currentUrl)
 
   const sidebarWidthRef = useRef(sidebarWidth)
-  sidebarWidthRef.current = sidebarWidth
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth
+  })
 
   const dragRef = useRef<{
     startX: number
@@ -1615,7 +1658,7 @@ export function ArcWindow({
               {currentUrl ? (
                 isElectron ? (
                   <webview
-                    ref={webviewRef as any}
+                    ref={webviewRef}
                     src={currentUrl}
                     style={{
                       position: 'absolute',
