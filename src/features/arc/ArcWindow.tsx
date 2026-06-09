@@ -758,19 +758,111 @@ function SitePreview({ url }: { url: string }) {
   )
 }
 
+/**
+ * Parse a YouTube timestamp query value into seconds.
+ *
+ * YouTube accepts several formats in the `t=` / `start=` param:
+ *   - `12915`        bare integer seconds
+ *   - `12915s`       integer with trailing `s`
+ *   - `2m15s`        minutes + seconds
+ *   - `1h2m3s`       hours + minutes + seconds
+ *   - `30m` / `1h`   partial composites
+ *
+ * Returns null for empty / malformed input or zero (so we don't bother
+ * appending `?start=0` to embed URLs that have no real offset).
+ */
+function parseYouTubeTimestamp(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  if (/^\d+$/.test(trimmed)) {
+    const n = parseInt(trimmed, 10)
+    return n > 0 ? n : null
+  }
+  const m = trimmed.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/i)
+  if (!m || (!m[1] && !m[2] && !m[3])) return null
+  const h = m[1] ? parseInt(m[1], 10) : 0
+  const min = m[2] ? parseInt(m[2], 10) : 0
+  const s = m[3] ? parseInt(m[3], 10) : 0
+  const total = h * 3600 + min * 60 + s
+  return total > 0 ? total : null
+}
+
+/**
+ * Build a YouTube `/embed/` URL for the given share URL, preserving the
+ * timestamp (`t=` or `start=`) and any playlist context (`list`, `index`)
+ * that the user pasted in. Returns null for non-YouTube URLs.
+ *
+ * Supported source URL shapes:
+ *   - `youtube.com/watch?v=<id>`        canonical share URL
+ *   - `youtu.be/<id>`                   short share URL
+ *   - `youtube.com/shorts/<id>`         vertical short
+ *   - `youtube.com/live/<id>`           live broadcast
+ *   - `youtube.com/embed/<id>`          already-embed URL (idempotent)
+ */
 function getYouTubeEmbedUrl(url: string): string | null {
   try {
     const u = new URL(url)
     let videoId: string | null = null
-    if (u.hostname.includes('youtube.com') && u.searchParams.has('v')) {
-      videoId = u.searchParams.get('v')
-    } else if (u.hostname === 'youtu.be') {
-      videoId = u.pathname.slice(1)
+    const slug = (prefix: string) => {
+      if (!u.pathname.startsWith(prefix)) return null
+      const rest = u.pathname.slice(prefix.length).split('/')[0]
+      return rest || null
     }
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : null
+    if (u.hostname.includes('youtube.com')) {
+      if (u.searchParams.has('v')) videoId = u.searchParams.get('v')
+      else videoId = slug('/shorts/') ?? slug('/live/') ?? slug('/embed/')
+    } else if (u.hostname === 'youtu.be') {
+      videoId = u.pathname.slice(1).split('/')[0] || null
+    }
+    if (!videoId) return null
+
+    const params = new URLSearchParams()
+    const startSec = parseYouTubeTimestamp(
+      u.searchParams.get('t') ?? u.searchParams.get('start'),
+    )
+    if (startSec) params.set('start', String(startSec))
+    const list = u.searchParams.get('list')
+    if (list) params.set('list', list)
+    const index = u.searchParams.get('index')
+    if (index) params.set('index', index)
+
+    const qs = params.toString()
+    return qs
+      ? `https://www.youtube.com/embed/${videoId}?${qs}`
+      : `https://www.youtube.com/embed/${videoId}`
   } catch {
     return null
   }
+}
+
+/**
+ * Map a navigation URL to the URL we actually load in the player.
+ *
+ * Scoped to timestamped YouTube links only: a YouTube URL carrying a
+ * `t=` / `start=` offset is rewritten to its `/embed/?start=` form,
+ * which — unlike the raw watch page in a webview — reliably honors the
+ * offset every time the link opens (e.g. RDC 2025 keynote @ 3:35:15 →
+ * `t=12915` plays from that mark on launch instead of 0:00).
+ *
+ * YouTube links *without* a timestamp, and all non-YouTube URLs, pass
+ * through untouched so they keep loading the full page rather than the
+ * bare embed player — the embed swap only buys us timestamp fidelity,
+ * so we only pay its cost (losing comments / related / chrome) when a
+ * timestamp is actually present.
+ */
+function toRenderUrl(url: string): string {
+  const embed = getYouTubeEmbedUrl(url)
+  if (!embed) return url
+  let hasTimestamp = false
+  try {
+    const u = new URL(url)
+    hasTimestamp =
+      parseYouTubeTimestamp(u.searchParams.get('t') ?? u.searchParams.get('start')) != null
+  } catch {
+    hasTimestamp = false
+  }
+  return hasTimestamp ? embed : url
 }
 
 // Proxy cache to avoid re-fetching pages we've already loaded
@@ -1267,7 +1359,7 @@ export function ArcWindow({
   })
 
   /* ── navigation state (works for both webview & iframe) ── */
-  const INITIAL_URL = 'https://www.youtube.com/watch?v=8IcYpOl4Sdk'
+  const INITIAL_URL = 'https://www.youtube.com/watch?v=8IcYpOl4Sdk&t=755'
   const [history, setHistory] = useState<string[]>([INITIAL_URL])
   const [historyIndex, setHistoryIndex] = useState(0)
   const currentUrl = historyIndex >= 0 ? history[historyIndex] : ''
@@ -1292,7 +1384,7 @@ export function ArcWindow({
 
     if (isElectron) {
       const wv = webviewRef.current as WebviewTag | null
-      if (wv?.loadURL) wv.loadURL(newUrl)
+      if (wv?.loadURL) wv.loadURL(toRenderUrl(newUrl))
     }
   }, [])
 
@@ -1344,14 +1436,18 @@ export function ArcWindow({
     }
 
     const onDidNavigate = (e: Event & { url?: string }) => {
-      if (e.url && e.url !== 'about:blank') {
-        const idx = historyIndexRef.current
-        const prev = historyRef.current
-        if (prev[idx] !== e.url) {
-          setHistory([...prev.slice(0, idx + 1), e.url])
-          setHistoryIndex(idx + 1)
-        }
-      }
+      if (!e.url || e.url === 'about:blank') return
+      const idx = historyIndexRef.current
+      const prev = historyRef.current
+      const current = prev[idx]
+      // We load YouTube as its `/embed/` form to honor timestamps, so the
+      // webview reports that embed URL back here. Treat "navigated to the
+      // render form of where we already are" as a no-op — otherwise it
+      // pushes a phantom history entry and replaces the clean watch URL in
+      // the topbar with the ugly embed URL.
+      if (e.url === current || e.url === toRenderUrl(current)) return
+      setHistory([...prev.slice(0, idx + 1), e.url])
+      setHistoryIndex(idx + 1)
     }
 
     wv.addEventListener('did-start-loading', onStart)
@@ -1382,7 +1478,7 @@ export function ArcWindow({
   const [sidebarItems, setSidebarItems] = useState<SidebarNode[]>([
     { type: 'folder', id: -1, label: '2026', expanded: true, children: [
       { type: 'folder', id: -2, label: 'Agentic Studio', expanded: true, children: [
-        { type: 'tab', id: 0, url: 'https://www.youtube.com/watch?v=8IcYpOl4Sdk', title: 'Tech Talks EP33 | The Future of Agentic Game Creation' },
+        { type: 'tab', id: 0, url: 'https://www.youtube.com/watch?v=8IcYpOl4Sdk&t=755', title: 'Tech Talks EP33 | The Future of Agentic Game Creation' },
         { type: 'tab', id: -3, url: 'https://about.roblox.com/newsroom/2026/04/roblox-studio-going-agentic', title: 'Roblox Studio is Going Agentic' },
         { type: 'tab', id: -5, url: 'https://devforum.roblox.com/t/announcing-planning-mode-for-roblox-assistant/4580715', title: 'Announcing Planning Mode for Roblox Assistant' },
       ] },
@@ -1659,7 +1755,7 @@ export function ArcWindow({
                 isElectron ? (
                   <webview
                     ref={webviewRef}
-                    src={currentUrl}
+                    src={toRenderUrl(currentUrl)}
                     style={{
                       position: 'absolute',
                       inset: 0,
