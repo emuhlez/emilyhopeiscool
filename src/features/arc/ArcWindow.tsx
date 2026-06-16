@@ -839,30 +839,36 @@ function getYouTubeEmbedUrl(url: string): string | null {
 /**
  * Map a navigation URL to the URL we actually load in the player.
  *
- * Scoped to timestamped YouTube links only: a YouTube URL carrying a
- * `t=` / `start=` offset is rewritten to its `/embed/?start=` form,
- * which — unlike the raw watch page in a webview — reliably honors the
- * offset every time the link opens (e.g. RDC 2025 keynote @ 3:35:15 →
- * `t=12915` plays from that mark on launch instead of 0:00).
+ * Every YouTube link is rewritten to its `/embed/` form (timestamp via
+ * `start=`, plus playlist `list`/`index`, all preserved); non-YouTube
+ * URLs pass through untouched.
  *
- * YouTube links *without* a timestamp, and all non-YouTube URLs, pass
- * through untouched so they keep loading the full page rather than the
- * bare embed player — the embed swap only buys us timestamp fidelity,
- * so we only pay its cost (losing comments / related / chrome) when a
- * timestamp is actually present.
+ * We embed *all* YouTube — not just timestamped links — so the Electron
+ * `<webview>` path behaves identically to the web `<ProxiedIframe>` path,
+ * which is *forced* to embed every YouTube link (YouTube blocks
+ * proxy-framing of its watch page). Unifying on embed means a timestamped
+ * link honors its offset reliably and consistently in both runtimes —
+ * which is the whole point — at the cost of YouTube always rendering as
+ * the bare player rather than the full watch page.
  */
 function toRenderUrl(url: string): string {
-  const embed = getYouTubeEmbedUrl(url)
-  if (!embed) return url
-  let hasTimestamp = false
-  try {
-    const u = new URL(url)
-    hasTimestamp =
-      parseYouTubeTimestamp(u.searchParams.get('t') ?? u.searchParams.get('start')) != null
-  } catch {
-    hasTimestamp = false
-  }
-  return hasTimestamp ? embed : url
+  return getYouTubeEmbedUrl(url) ?? url
+}
+
+/**
+ * Do two URLs resolve to the same player destination? Compares the
+ * `/embed/<id>` base (ignoring query params + host normalization) for
+ * YouTube, so the webview re-reporting its own embed URL with
+ * player-appended params (a `did-navigate-in-page` from the embed) isn't
+ * mistaken for a fresh navigation. Falls back to exact equality for
+ * everything else.
+ */
+function isSamePlayerTarget(a: string, b: string): boolean {
+  if (a === b) return true
+  const ea = getYouTubeEmbedUrl(a)
+  const eb = getYouTubeEmbedUrl(b)
+  if (ea && eb) return ea.split('?')[0] === eb.split('?')[0]
+  return false
 }
 
 // Proxy cache to avoid re-fetching pages we've already loaded
@@ -1366,6 +1372,15 @@ export function ArcWindow({
   const canGoBack = historyIndex > 0
   const canGoForward = historyIndex < history.length - 1
 
+  // The Electron <webview> src is uncontrolled after mount: it seeds the
+  // first load, then every navigation is driven imperatively via
+  // loadURL/goBack/goForward below. Binding src to currentUrl as well would
+  // load each page twice (once from the src change, once from loadURL) and
+  // let the webview's native history drift out of sync with our React
+  // history. Captured once so React never re-navigates the webview behind
+  // our back; `did-navigate` keeps our history in step with the webview.
+  const [initialWebviewSrc] = useState(() => toRenderUrl(INITIAL_URL))
+
   const [webviewLoading, setWebviewLoading] = useState(false)
   const webviewRef = useRef<HTMLElement>(null)
   const listenersAttached = useRef(false)
@@ -1440,12 +1455,13 @@ export function ArcWindow({
       const idx = historyIndexRef.current
       const prev = historyRef.current
       const current = prev[idx]
-      // We load YouTube as its `/embed/` form to honor timestamps, so the
-      // webview reports that embed URL back here. Treat "navigated to the
-      // render form of where we already are" as a no-op — otherwise it
-      // pushes a phantom history entry and replaces the clean watch URL in
-      // the topbar with the ugly embed URL.
-      if (e.url === current || e.url === toRenderUrl(current)) return
+      // The webview reports its own loaded URL back here — for YouTube that's
+      // the `/embed/` form, often with params the player appends as it spins
+      // up. Treat any report that resolves to the destination we're already
+      // on as a no-op, so it can't push a phantom history entry or leak the
+      // embed URL into the topbar (which mirrors `currentUrl`, the clean
+      // watch URL). Only a genuinely different destination advances history.
+      if (isSamePlayerTarget(e.url, current)) return
       setHistory([...prev.slice(0, idx + 1), e.url])
       setHistoryIndex(idx + 1)
     }
@@ -1755,7 +1771,7 @@ export function ArcWindow({
                 isElectron ? (
                   <webview
                     ref={webviewRef}
-                    src={toRenderUrl(currentUrl)}
+                    src={initialWebviewSrc}
                     style={{
                       position: 'absolute',
                       inset: 0,
